@@ -6,7 +6,7 @@
 from typing import Dict, List, Optional
 from collections import defaultdict
 
-from data.flow_aggregator import FlowStats
+from capture.flow_aggregator import FlowStats
 from config import FEATURE_CONFIG
 
 # 移除 logger 相关代码

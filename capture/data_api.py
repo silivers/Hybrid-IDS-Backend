@@ -14,9 +14,9 @@ from dataclasses import dataclass
 # 添加项目根目录到路径（用于直接运行）
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from data.packet_capture import PacketCapturer, CapturedPacket
-from data.flow_aggregator import FlowAggregator, FlowStats
-from data.feature_extractor import FeatureExtractor
+from capture.packet_capture import PacketCapturer, CapturedPacket
+from capture.flow_aggregator import FlowAggregator, FlowStats
+from capture.feature_extractor import FeatureExtractor
 
 
 @dataclass
