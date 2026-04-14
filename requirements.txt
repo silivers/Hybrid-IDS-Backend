@@ -1,0 +1,6 @@
+scapy
+numpy
+pandas
+xgboost
+joblib
+mysql-connector-python
