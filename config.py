@@ -70,3 +70,17 @@ RULE_MATCH_CONFIG = {
     # 规则匹配超时时间（秒）
     'match_timeout': 5,
 }
+
+# ========== API 配置 ==========
+API_CONFIG = {
+    'enabled': True,                    # 是否启用API服务
+    'host': '0.0.0.0',                  # 监听地址
+    'port': 8000,                       # 监听端口（FastAPI默认8000）
+    'reload': False,                    # 自动重载（生产环境关闭）
+}
+
+# 分页配置
+PAGINATION_CONFIG = {
+    'default_page_size': 20,
+    'max_page_size': 100,
+}

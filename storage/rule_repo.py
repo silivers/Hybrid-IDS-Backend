@@ -141,3 +141,48 @@ class RuleRepository:
         self._rule_cache.clear()
         self._content_cache.clear()
         print("[INFO] RuleRepository cache cleared")
+
+
+
+# ========== 以下为API扩展新增方法 ==========
+
+def get_rules_with_filters(self, filters: dict, page: int = 1, 
+                           page_size: int = 20) -> tuple:
+    """获取规则列表（支持分页、筛选）
+    
+    Returns:
+        (total_count, rules_list)
+    """
+    pass
+
+def get_rule_by_id_with_contents(self, sid: int) -> dict:
+    """获取规则详情（包含所有content条件）"""
+    pass
+
+def update_rule_enabled(self, sid: int, enabled: int) -> bool:
+    """更新规则的启用状态"""
+    pass
+
+def get_classtype_stats(self) -> list:
+    """获取规则分类统计（直接使用rule_stats视图）"""
+    pass
+
+def get_all_classtypes(self) -> list:
+    """获取所有可用的规则分类"""
+    pass
+
+def get_rule_type_distribution_for_asset(self, dst_ip: str) -> list:
+    """获取某资产受到的攻击类型分布"""
+    pass
+
+def get_rules_by_sids(self, sids: list) -> list:
+    """批量获取规则信息（用于告警列表关联查询）"""
+    pass
+
+def get_content_patterns_for_rules(self, sids: list) -> dict:
+    """批量获取多个规则的content条件（返回 sid -> contents 映射）"""
+    pass
+
+def get_rule_statistics(self) -> dict:
+    """获取规则统计信息（总数、启用数、按严重程度分布等）"""
+    pass
