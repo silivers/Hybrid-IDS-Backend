@@ -81,11 +81,7 @@ def create_app(ids_instance):
     app.include_router(rules.router, prefix="/api/rules", tags=["规则管理"])
     app.include_router(reports.router, prefix="/api/reports", tags=["报表"])
     app.include_router(stats.router, prefix="/api/stats", tags=["统计"])
-    
-    # 健康检查
-    @app.get("/health", tags=["健康检查"])
-    async def health_check():
-        return {"status": "ok", "message": "API server is running"}
+
     
     # 根路径
     @app.get("/", tags=["根路径"])
