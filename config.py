@@ -84,3 +84,15 @@ PAGINATION_CONFIG = {
     'default_page_size': 20,
     'max_page_size': 100,
 }
+
+# ========== 告警去重配置 ==========
+DEDUPLICATION_CONFIG = {
+    # 同一流+同一规则的告警缓存时间（秒）
+    'alert_cache_ttl': 60,
+    # 流级别处理状态缓存时间（秒）
+    'flow_cache_ttl': 300,
+    # 是否启用告警去重
+    'enable_deduplication': True,
+    # 同一源IP+目标IP的相似告警聚合窗口（秒）
+    'aggregation_window': 10,
+}
