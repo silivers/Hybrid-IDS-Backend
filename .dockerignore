@@ -1,0 +1,7 @@
+# .dockerignore 文件可以排除不需要的文件
+__pycache__/
+*.pyc
+.git/
+.env
+*.log
+tests/
