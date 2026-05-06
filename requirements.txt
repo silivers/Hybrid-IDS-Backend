@@ -1,9 +1,8 @@
 scapy
 numpy
 pandas
-xgboost
+xgboost-cpu
 joblib
 mysql-connector-python
 fastapi
 uvicorn
-python-multipart
