@@ -1,4 +1,3 @@
-# storage/rule_repo.py
 """规则仓库 - MySQL规则查询"""
 import mysql.connector
 from mysql.connector import pooling
@@ -8,21 +7,14 @@ import sys
 import os
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from config import DB_CONFIG
 
 
 class RuleRepository:
-    """规则仓库"""
+    """规则仓库 - 管理Snort规则的查询、缓存和统计"""
     
     def __init__(self):
-        """初始化数据库连接池"""
-        self._init_connection_pool()
-        self._rule_cache = {}
-        self._content_cache = {}
-        
-    def _init_connection_pool(self):
-        """初始化连接池"""
+        """初始化数据库连接池和缓存"""
         try:
             self.pool = pooling.MySQLConnectionPool(
                 pool_name="rule_pool",
@@ -34,433 +26,263 @@ class RuleRepository:
         except Exception as e:
             print(f"[ERROR] Failed to initialize connection pool: {e}")
             self.pool = None
+        self._rule_cache = {}
+        self._content_cache = {}
     
-    def get_connection(self):
-        """获取数据库连接"""
+    def _get_conn(self):
+        """获取数据库连接
+        
+        Returns:
+            MySQL连接对象
+        """
         if self.pool:
             return self.pool.get_connection()
         import mysql.connector
         return mysql.connector.connect(**{k: v for k, v in DB_CONFIG.items() 
                                           if k not in ['pool_size', 'pool_recycle']})
     
+    def _execute_query(self, query: str, params: tuple = None, fetch_one=False, fetch_all=False):
+        """执行查询的通用方法
+        
+        Args:
+            query: SQL查询语句
+            params: 查询参数元组
+            fetch_one: 是否返回单条记录
+            fetch_all: 是否返回所有记录
+        
+        Returns:
+            根据参数返回单条记录、多条记录、影响行数或None
+        """
+        conn = self._get_conn()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute(query, params or ())
+            if fetch_one:
+                return cursor.fetchone()
+            if fetch_all:
+                return cursor.fetchall()
+            conn.commit()
+            return cursor.rowcount
+        finally:
+            cursor.close()
+            conn.close()
+    
     def find_rule_by_5tuple(self, protocol: str, src_ip: str, src_port: int,
                             dst_ip: str, dst_port: int) -> Optional[Dict]:
-        """根据五元组查找匹配的规则"""
-        conn = None
-        cursor = None
+        """根据五元组查找匹配的规则
         
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor(dictionary=True)
-            
-            query = """
-                SELECT sid, msg, classtype, severity, protocol, 
-                       source_ip, source_port, dest_ip, dest_port, 
-                       flow, rule_text
-                FROM snort_rules
-                WHERE enabled = 1
-                AND protocol = %s
-                AND (source_port = %s OR source_port = 'any' OR source_port = '')
-                AND (dest_port = %s OR dest_port = 'any' OR dest_port = '')
-            """
-            
-            cursor.execute(query, (protocol, str(src_port), str(dst_port)))
-            rules = cursor.fetchall()
-            
-            for rule in rules:
-                if self._match_ip(rule.get('source_ip'), src_ip) and \
-                   self._match_ip(rule.get('dest_ip'), dst_ip):
-                    return rule
-            
-            return None
-            
-        except Exception as e:
-            print(f"[ERROR] find_rule_by_5tuple failed: {e}")
-            return None
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
+        Args:
+            protocol: 协议类型 (tcp/udp/icmp等)
+            src_ip: 源IP地址
+            src_port: 源端口
+            dst_ip: 目的IP地址
+            dst_port: 目的端口
+        
+        Returns:
+            匹配的规则字典，包含sid、msg、classtype等字段，未找到返回None
+        """
+        query = """
+            SELECT sid, msg, classtype, severity, protocol, 
+                   source_ip, source_port, dest_ip, dest_port, 
+                   flow, rule_text
+            FROM snort_rules
+            WHERE enabled = 1
+            AND protocol = %s
+            AND (source_port = %s OR source_port = 'any' OR source_port = '')
+            AND (dest_port = %s OR dest_port = 'any' OR dest_port = '')
+        """
+        rules = self._execute_query(query, (protocol, str(src_port), str(dst_port)), fetch_all=True)
+        
+        for rule in rules or []:
+            if self._match_ip(rule.get('source_ip'), src_ip) and \
+               self._match_ip(rule.get('dest_ip'), dst_ip):
+                return rule
+        return None
     
     def _match_ip(self, rule_ip: Optional[str], actual_ip: str) -> bool:
-        """匹配IP地址"""
+        """匹配IP地址（支持通配符和变量）
+        
+        Args:
+            rule_ip: 规则中的IP地址（可为any、$HOME_NET、$EXTERNAL_NET或具体IP）
+            actual_ip: 实际的IP地址
+        
+        Returns:
+            True表示匹配，False表示不匹配
+        """
         if not rule_ip or rule_ip == 'any' or rule_ip == '':
             return True
         return rule_ip == actual_ip or rule_ip == '$HOME_NET' or rule_ip == '$EXTERNAL_NET'
     
     def get_rule_contents(self, sid: int) -> List[Dict]:
-        """获取规则的content匹配条件"""
+        """获取规则的content匹配条件
+        
+        Args:
+            sid: 规则ID
+        
+        Returns:
+            content条件列表，每个元素包含content_pattern、offset_val、depth_val等字段
+        """
         if sid in self._content_cache:
             return self._content_cache[sid]
         
-        conn = None
-        cursor = None
+        contents = self._execute_query("""
+            SELECT content_pattern, content_type, offset_val, depth_val,
+                   within_val, distance_val, is_negated, position_order
+            FROM rule_contents
+            WHERE sid = %s
+            ORDER BY position_order
+        """, (sid,), fetch_all=True) or []
         
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor(dictionary=True)
-            
-            query = """
-                SELECT content_pattern, content_type, offset_val, depth_val,
-                       within_val, distance_val, is_negated, position_order
-                FROM rule_contents
-                WHERE sid = %s
-                ORDER BY position_order
-            """
-            
-            cursor.execute(query, (sid,))
-            contents = cursor.fetchall()
-            
-            self._content_cache[sid] = contents
-            return contents
-            
-        except Exception as e:
-            print(f"[ERROR] get_rule_contents failed for sid {sid}: {e}")
-            return []
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
+        self._content_cache[sid] = contents
+        return contents
     
     # ========== API扩展新增方法 ==========
     
     def get_rules_with_filters(self, filters: dict = None, page: int = 1, 
                                page_size: int = 20) -> tuple:
-        """
-        获取规则列表（支持分页、筛选）
+        """获取规则列表（支持分页和筛选）
         
         Args:
-            filters: 筛选条件 {'sid', 'msg_keyword', 'classtype', 'protocol', 'severity', 'enabled'}
-            page: 页码
+            filters: 筛选条件字典，支持sid、msg_keyword、classtype、protocol、severity、enabled
+            page: 页码，从1开始
             page_size: 每页数量
         
         Returns:
-            (total_count, rules_list)
+            (total_count, rules_list) 元组，total_count为总记录数，rules_list为规则列表
         """
-        conn = None
-        cursor = None
+        where = []
+        params = []
         
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor(dictionary=True)
-            
-            # 构建基础查询
-            base_query = """
-                SELECT sid, msg, classtype, protocol, 
-                       source_ip, source_port, dest_ip, dest_port,
-                       severity, enabled, rev, reference, rule_text
-                FROM snort_rules
-                WHERE 1=1
-            """
-            count_query = "SELECT COUNT(*) as total FROM snort_rules WHERE 1=1"
-            params = []
-            
-            # 应用筛选条件
-            if filters:
-                if 'sid' in filters and filters['sid']:
-                    base_query += " AND sid = %s"
-                    count_query += " AND sid = %s"
-                    params.append(filters['sid'])
-                
-                if 'msg_keyword' in filters and filters['msg_keyword']:
-                    base_query += " AND msg LIKE %s"
-                    count_query += " AND msg LIKE %s"
-                    params.append(f'%{filters["msg_keyword"]}%')
-                
-                if 'classtype' in filters and filters['classtype']:
-                    base_query += " AND classtype = %s"
-                    count_query += " AND classtype = %s"
-                    params.append(filters['classtype'])
-                
-                if 'protocol' in filters and filters['protocol']:
-                    base_query += " AND protocol = %s"
-                    count_query += " AND protocol = %s"
-                    params.append(filters['protocol'])
-                
-                if 'severity' in filters and filters['severity']:
-                    base_query += " AND severity = %s"
-                    count_query += " AND severity = %s"
-                    params.append(filters['severity'])
-                
-                if 'enabled' in filters and filters['enabled'] is not None:
-                    base_query += " AND enabled = %s"
-                    count_query += " AND enabled = %s"
-                    params.append(filters['enabled'])
-            
-            # 获取总数
-            cursor.execute(count_query, params)
-            total = cursor.fetchone()['total']
-            
-            # 分页
-            offset = (page - 1) * page_size
-            base_query += " ORDER BY sid ASC LIMIT %s OFFSET %s"
-            params.extend([page_size, offset])
-            
-            cursor.execute(base_query, params)
-            rules = cursor.fetchall()
-            
-            return total, rules
-            
-        except Exception as e:
-            print(f"[ERROR] get_rules_with_filters: {e}")
-            return 0, []
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
+        if filters:
+            for key, val in filters.items():
+                if val is not None:
+                    if key == 'sid':
+                        where.append("sid = %s")
+                        params.append(val)
+                    elif key == 'msg_keyword':
+                        where.append("msg LIKE %s")
+                        params.append(f'%{val}%')
+                    elif key == 'enabled':
+                        where.append("enabled = %s")
+                        params.append(val)
+                    else:
+                        where.append(f"{key} = %s")
+                        params.append(val)
+        
+        where_clause = " AND " + " AND ".join(where) if where else ""
+        
+        total = self._execute_query(
+            f"SELECT COUNT(*) as total FROM snort_rules WHERE 1=1{where_clause}",
+            params, fetch_one=True
+        )['total']
+        
+        offset = (page - 1) * page_size
+        rules = self._execute_query(f"""
+            SELECT sid, msg, classtype, protocol, source_ip, source_port,
+                   dest_ip, dest_port, severity, enabled, rev, reference, rule_text
+            FROM snort_rules WHERE 1=1{where_clause}
+            ORDER BY sid ASC LIMIT %s OFFSET %s
+        """, params + [page_size, offset], fetch_all=True) or []
+        
+        return total, rules
     
     def get_rule_by_id_with_contents(self, sid: int) -> Optional[Dict]:
-        """
-        获取规则详情（包含所有content条件）
+        """获取规则详情（包含所有content条件）
         
         Args:
             sid: 规则ID
         
         Returns:
-            规则字典，包含contents列表
+            规则字典，包含contents字段（content条件列表），未找到返回None
         """
-        conn = None
-        cursor = None
+        rule = self._execute_query("""
+            SELECT sid, msg, classtype, protocol, source_ip, source_port,
+                   dest_ip, dest_port, severity, enabled, rev, reference, rule_text
+            FROM snort_rules WHERE sid = %s
+        """, (sid,), fetch_one=True)
         
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor(dictionary=True)
-            
-            # 获取规则基本信息
-            cursor.execute("""
-                SELECT sid, msg, classtype, protocol, 
-                       source_ip, source_port, dest_ip, dest_port,
-                       severity, enabled, rev, reference, rule_text
-                FROM snort_rules
-                WHERE sid = %s
-            """, (sid,))
-            rule = cursor.fetchone()
-            
-            if rule:
-                # 获取关联的content条件
-                cursor.execute("""
-                    SELECT content_pattern, content_type, offset_val, depth_val,
-                           within_val, distance_val, is_negated, position_order
-                    FROM rule_contents
-                    WHERE sid = %s
-                    ORDER BY position_order
-                """, (sid,))
-                rule['contents'] = cursor.fetchall()
-            
-            return rule
-            
-        except Exception as e:
-            print(f"[ERROR] get_rule_by_id_with_contents for sid {sid}: {e}")
-            return None
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
+        if rule:
+            rule['contents'] = self.get_rule_contents(sid)
+        return rule
     
     def update_rule_enabled(self, sid: int, enabled: int) -> bool:
-        """
-        更新规则的启用状态
+        """更新规则的启用状态
         
         Args:
             sid: 规则ID
-            enabled: 启用状态 (0/1)
+            enabled: 启用状态，1表示启用，0表示禁用
         
         Returns:
-            是否成功
+            True表示更新成功，False表示失败
         """
-        conn = None
-        cursor = None
-        
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            cursor.execute("""
-                UPDATE snort_rules 
-                SET enabled = %s 
-                WHERE sid = %s
-            """, (enabled, sid))
-            
-            conn.commit()
-            affected = cursor.rowcount
-            
-            # 清除缓存
-            if sid in self._rule_cache:
-                del self._rule_cache[sid]
-            
-            return affected > 0
-            
-        except Exception as e:
-            print(f"[ERROR] update_rule_enabled for sid {sid}: {e}")
-            if conn:
-                conn.rollback()
-            return False
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
+        result = self._execute_query(
+            "UPDATE snort_rules SET enabled = %s WHERE sid = %s",
+            (enabled, sid)
+        )
+        if sid in self._rule_cache:
+            del self._rule_cache[sid]
+        return result > 0
     
     def get_classtype_stats(self) -> List[Dict]:
-        """
-        获取规则分类统计
+        """获取规则分类统计
         
         Returns:
-            分类统计列表 [{'classtype': 'xxx', 'rule_count': 10, 'avg_severity': 2.5}]
+            分类统计列表，每个元素包含classtype、rule_count、avg_severity字段
         """
-        conn = None
-        cursor = None
-        
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor(dictionary=True)
-            
-            cursor.execute("""
-                SELECT 
-                    classtype,
-                    COUNT(*) as rule_count,
-                    ROUND(AVG(severity), 2) as avg_severity
-                FROM snort_rules
-                WHERE classtype IS NOT NULL AND classtype != ''
-                GROUP BY classtype
-                ORDER BY rule_count DESC
-            """)
-            stats = cursor.fetchall()
-            
-            return stats
-            
-        except Exception as e:
-            print(f"[ERROR] get_classtype_stats: {e}")
-            return []
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
+        return self._execute_query("""
+            SELECT classtype, COUNT(*) as rule_count, ROUND(AVG(severity), 2) as avg_severity
+            FROM snort_rules
+            WHERE classtype IS NOT NULL AND classtype != ''
+            GROUP BY classtype ORDER BY rule_count DESC
+        """, fetch_all=True) or []
     
     def get_all_classtypes(self) -> List[str]:
-        """
-        获取所有可用的规则分类
+        """获取所有可用的规则分类
         
         Returns:
             分类名称列表
         """
-        conn = None
-        cursor = None
-        
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            cursor.execute("""
-                SELECT DISTINCT classtype
-                FROM snort_rules
-                WHERE classtype IS NOT NULL AND classtype != ''
-                ORDER BY classtype
-            """)
-            classtypes = [row[0] for row in cursor.fetchall()]
-            
-            return classtypes
-            
-        except Exception as e:
-            print(f"[ERROR] get_all_classtypes: {e}")
-            return []
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
+        rows = self._execute_query("""
+            SELECT DISTINCT classtype FROM snort_rules
+            WHERE classtype IS NOT NULL AND classtype != '' ORDER BY classtype
+        """, fetch_all=True) or []
+        return [row['classtype'] for row in rows]
     
     def get_rule_type_distribution_for_asset(self, dst_ip: str) -> List[Dict]:
-        """
-        获取某资产受到的攻击类型分布
+        """获取某资产受到的攻击类型分布
         
         Args:
-            dst_ip: 目标IP地址
+            dst_ip: 目标IP地址（受保护的资产）
         
         Returns:
-            攻击类型分布列表
+            攻击类型分布列表，每个元素包含classtype、alert_count、avg_severity字段
         """
-        conn = None
-        cursor = None
-        
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor(dictionary=True)
-            
-            cursor.execute("""
-                SELECT 
-                    r.classtype,
-                    COUNT(*) as alert_count,
-                    AVG(r.severity) as avg_severity
-                FROM snort_alerts a
-                JOIN snort_rules r ON a.sid = r.sid
-                WHERE a.dst_ip = %s AND r.classtype IS NOT NULL
-                GROUP BY r.classtype
-                ORDER BY alert_count DESC
-                LIMIT 20
-            """, (dst_ip,))
-            distribution = cursor.fetchall()
-            
-            return distribution
-            
-        except Exception as e:
-            print(f"[ERROR] get_rule_type_distribution_for_asset: {e}")
-            return []
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
+        return self._execute_query("""
+            SELECT r.classtype, COUNT(*) as alert_count, AVG(r.severity) as avg_severity
+            FROM snort_alerts a JOIN snort_rules r ON a.sid = r.sid
+            WHERE a.dst_ip = %s AND r.classtype IS NOT NULL
+            GROUP BY r.classtype ORDER BY alert_count DESC LIMIT 20
+        """, (dst_ip,), fetch_all=True) or []
     
     def get_rules_by_sids(self, sids: List[int]) -> List[Dict]:
-        """
-        批量获取规则信息
+        """批量获取规则信息
         
         Args:
             sids: 规则ID列表
         
         Returns:
-            规则信息列表
+            规则信息列表，每个元素包含sid、msg、classtype、protocol、severity、enabled、reference字段
         """
         if not sids:
             return []
-        
-        conn = None
-        cursor = None
-        
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor(dictionary=True)
-            
-            placeholders = ','.join(['%s'] * len(sids))
-            query = f"""
-                SELECT sid, msg, classtype, protocol, severity, enabled, reference
-                FROM snort_rules
-                WHERE sid IN ({placeholders})
-            """
-            
-            cursor.execute(query, sids)
-            rules = cursor.fetchall()
-            
-            return rules
-            
-        except Exception as e:
-            print(f"[ERROR] get_rules_by_sids: {e}")
-            return []
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
+        placeholders = ','.join(['%s'] * len(sids))
+        return self._execute_query(f"""
+            SELECT sid, msg, classtype, protocol, severity, enabled, reference
+            FROM snort_rules WHERE sid IN ({placeholders})
+        """, tuple(sids), fetch_all=True) or []
     
     def get_content_patterns_for_rule(self, sid: int) -> List[Dict]:
-        """
-        获取规则的content模式
+        """获取规则的content模式
         
         Args:
             sid: 规则ID
@@ -471,65 +293,27 @@ class RuleRepository:
         return self.get_rule_contents(sid)
     
     def get_rule_statistics(self) -> Dict:
-        """
-        获取规则统计信息
+        """获取规则统计信息
         
         Returns:
-            统计信息字典
+            统计信息字典，包含total_rules、enabled_rules、disabled_rules、
+            severity_distribution、protocol_distribution字段
         """
-        conn = None
-        cursor = None
+        total = self._execute_query("SELECT COUNT(*) as total FROM snort_rules", fetch_one=True)['total']
+        enabled = self._execute_query("SELECT COUNT(*) as enabled FROM snort_rules WHERE enabled = 1", fetch_one=True)['enabled']
         
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor(dictionary=True)
-            
-            # 总规则数
-            cursor.execute("SELECT COUNT(*) as total FROM snort_rules")
-            total = cursor.fetchone()['total']
-            
-            # 启用规则数
-            cursor.execute("SELECT COUNT(*) as enabled FROM snort_rules WHERE enabled = 1")
-            enabled = cursor.fetchone()['enabled']
-            
-            # 按严重程度分布
-            cursor.execute("""
-                SELECT severity, COUNT(*) as count 
-                FROM snort_rules 
-                GROUP BY severity
-            """)
-            severity_dist = cursor.fetchall()
-            
-            # 按协议分布
-            cursor.execute("""
-                SELECT protocol, COUNT(*) as count 
-                FROM snort_rules 
-                WHERE protocol IS NOT NULL
-                GROUP BY protocol
-                ORDER BY count DESC
-                LIMIT 10
-            """)
-            protocol_dist = cursor.fetchall()
-            
-            return {
-                'total_rules': total,
-                'enabled_rules': enabled,
-                'disabled_rules': total - enabled,
-                'severity_distribution': severity_dist,
-                'protocol_distribution': protocol_dist
-            }
-            
-        except Exception as e:
-            print(f"[ERROR] get_rule_statistics: {e}")
-            return {}
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
+        return {
+            'total_rules': total,
+            'enabled_rules': enabled,
+            'disabled_rules': total - enabled,
+            'severity_distribution': self._execute_query(
+                "SELECT severity, COUNT(*) as count FROM snort_rules GROUP BY severity", fetch_all=True) or [],
+            'protocol_distribution': self._execute_query(
+                "SELECT protocol, COUNT(*) as count FROM snort_rules WHERE protocol IS NOT NULL GROUP BY protocol ORDER BY count DESC LIMIT 10", fetch_all=True) or []
+        }
     
     def reload(self):
-        """重新加载规则（清除缓存）"""
+        """重新加载规则（清除所有缓存）"""
         self._rule_cache.clear()
         self._content_cache.clear()
         print("[INFO] RuleRepository cache cleared")

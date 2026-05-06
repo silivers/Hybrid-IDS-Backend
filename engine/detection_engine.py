@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from collections import defaultdict
 import sys
 import os
+import threading
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -341,7 +342,3 @@ class DetectionEngine:
         self._stop_cleanup = True
         self.clear_caches()
         print("[INFO] DetectionEngine shutdown")
-
-
-# 添加 threading 导入
-import threading
