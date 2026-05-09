@@ -10,11 +10,11 @@ BASE_DIR = Path(__file__).resolve().parent
 
 # ========== 数据库配置 ==========
 DB_CONFIG = {
-    'host': 'localhost',
-    'port': 3306,
-    'user': 'root',
-    'password': '1234',  # 请修改为实际密码
-    'database': 'snort_db',
+    'host': os.getenv('DB_HOST', 'localhost'),  # 从环境变量读取，默认 localhost
+    'port': int(os.getenv('DB_PORT', 3306)),    # 从环境变量读取，默认 3306
+    'user': os.getenv('DB_USER', 'root'),       # 从环境变量读取，默认 root
+    'password': os.getenv('DB_PASSWORD', '1234'), # 从环境变量读取，默认 1234
+    'database': os.getenv('DB_NAME', 'snort_db'), # 从环境变量读取，默认 snort_db
     'charset': 'utf8mb4',
     'autocommit': True,
     'pool_size': 10,
