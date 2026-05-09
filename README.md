@@ -1,6 +1,8 @@
 # Hybrid-IDS 混合入侵检测系统
 
 Hybrid-IDS 是一个结合 Snort 规则匹配和 XGBoost 机器学习模型的混合入侵检测系统。系统采用两层检测策略：优先使用规则库快速匹配已知攻击，未命中规则的数据包交由 XGBoost 模型进行深度分析，实现对未知攻击的检测能力。
+## 前端链接
+- [Hybrid-IDS-Web](https://github.com/silivers/Hybrid-IDS-Web)
 
 ## 目录结构
 
