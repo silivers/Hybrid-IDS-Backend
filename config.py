@@ -99,51 +99,242 @@ DEDUPLICATION_CONFIG = {
 
 # ========== 威胁分类配置（仅用于控制台输出） ==========
 THREAT_CLASSIFICATION_CONFIG = {
-    # 攻击类型映射（用于控制台显示）
+    # 攻击类型映射（用于控制台显示）- 完整版适配测试脚本
     'attack_types': {
+        # DDoS/DoS攻击
         'ddos': {
             'name_cn': 'DDoS攻击',
-            'description': '分布式拒绝服务攻击'
+            'name_en': 'DDoS Attack',
+            'description': '分布式拒绝服务攻击',
+            'severity': 1
         },
+        'dos': {
+            'name_cn': 'DoS攻击',
+            'name_en': 'DoS Attack',
+            'description': '拒绝服务攻击',
+            'severity': 1
+        },
+        'dos_simulate': {
+            'name_cn': 'DoS攻击模拟',
+            'name_en': 'DoS Simulation',
+            'description': 'SYN洪水攻击模拟',
+            'severity': 1
+        },
+        
+        # Web攻击
+        'sql_injection': {
+            'name_cn': 'SQL注入攻击',
+            'name_en': 'SQL Injection',
+            'description': '结构化查询语言注入攻击',
+            'severity': 1
+        },
+        'sql_union': {
+            'name_cn': 'SQL注入-联合查询',
+            'name_en': 'SQL Injection - Union',
+            'description': '使用UNION查询的SQL注入',
+            'severity': 1
+        },
+        'sql_drop': {
+            'name_cn': 'SQL注入-删表攻击',
+            'name_en': 'SQL Injection - Drop Table',
+            'description': '尝试删除数据库表的SQL注入',
+            'severity': 1
+        },
+        'sql_time': {
+            'name_cn': 'SQL注入-时间盲注',
+            'name_en': 'SQL Injection - Time Blind',
+            'description': '基于时间延迟的SQL盲注',
+            'severity': 1
+        },
+        'xss': {
+            'name_cn': 'XSS跨站脚本攻击',
+            'name_en': 'Cross-Site Scripting',
+            'description': '跨站脚本注入攻击',
+            'severity': 2
+        },
+        'xss_script': {
+            'name_cn': 'XSS-脚本注入',
+            'name_en': 'XSS - Script Injection',
+            'description': '通过<script>标签的XSS攻击',
+            'severity': 2
+        },
+        'xss_event': {
+            'name_cn': 'XSS-事件触发',
+            'name_en': 'XSS - Event Handler',
+            'description': '通过事件处理器触发的XSS攻击',
+            'severity': 2
+        },
+        'xss_protocol': {
+            'name_cn': 'XSS-伪协议',
+            'name_en': 'XSS - Pseudo Protocol',
+            'description': '通过javascript:伪协议的XSS攻击',
+            'severity': 2
+        },
+        
+        # 路径遍历
+        'path_traversal': {
+            'name_cn': '路径遍历攻击',
+            'name_en': 'Path Traversal',
+            'description': '目录穿越攻击',
+            'severity': 2
+        },
+        'path_traversal_passwd': {
+            'name_cn': '路径遍历-读取密码文件',
+            'name_en': 'Path Traversal - Password File',
+            'description': '尝试读取/etc/passwd文件',
+            'severity': 2
+        },
+        'path_traversal_windows': {
+            'name_cn': '路径遍历-Windows配置',
+            'name_en': 'Path Traversal - Windows Config',
+            'description': '尝试读取Windows配置文件',
+            'severity': 2
+        },
+        
+        # 命令注入
+        'cmd_injection': {
+            'name_cn': '命令注入攻击',
+            'name_en': 'Command Injection',
+            'description': '操作系统命令注入攻击',
+            'severity': 1
+        },
+        'cmd_injection_passwd': {
+            'name_cn': '命令注入-读取密码',
+            'name_en': 'Command Injection - Read Password',
+            'description': '尝试读取密码文件',
+            'severity': 1
+        },
+        'cmd_injection_download': {
+            'name_cn': '命令注入-下载木马',
+            'name_en': 'Command Injection - Download Malware',
+            'description': '尝试下载恶意软件',
+            'severity': 1
+        },
+        
+        # 扫描探测
         'port_scan': {
             'name_cn': '端口扫描',
-            'description': '端口扫描探测'
+            'name_en': 'Port Scan',
+            'description': '端口扫描探测活动',
+            'severity': 2
         },
+        'port_scan_syn': {
+            'name_cn': 'SYN端口扫描',
+            'name_en': 'SYN Port Scan',
+            'description': 'SYN半开端口扫描',
+            'severity': 2
+        },
+        'port_scan_connect': {
+            'name_cn': '全连接端口扫描',
+            'name_en': 'Full Connect Port Scan',
+            'description': 'TCP全连接端口扫描',
+            'severity': 2
+        },
+        
+        # 服务攻击
         'web_attack': {
             'name_cn': 'Web攻击',
-            'description': 'Web应用攻击（SQL注入、XSS等）'
+            'name_en': 'Web Attack',
+            'description': 'Web应用攻击（SQL注入、XSS等）',
+            'severity': 1
         },
         'brute_force': {
             'name_cn': '暴力破解',
-            'description': '密码暴力破解攻击'
+            'name_en': 'Brute Force',
+            'description': '密码暴力破解攻击',
+            'severity': 2
         },
+        'brute_force_ssh': {
+            'name_cn': 'SSH暴力破解',
+            'name_en': 'SSH Brute Force',
+            'description': 'SSH服务密码暴力破解',
+            'severity': 2
+        },
+        'brute_force_ftp': {
+            'name_cn': 'FTP暴力破解',
+            'name_en': 'FTP Brute Force',
+            'description': 'FTP服务密码暴力破解',
+            'severity': 2
+        },
+        'brute_force_http': {
+            'name_cn': 'HTTP登录暴力破解',
+            'name_en': 'HTTP Login Brute Force',
+            'description': 'Web登录接口暴力破解',
+            'severity': 2
+        },
+        
+        # 协议攻击
         'ntp_amplification': {
             'name_cn': 'NTP放大攻击',
-            'description': 'NTP协议放大反射攻击'
+            'name_en': 'NTP Amplification',
+            'description': 'NTP协议放大反射攻击',
+            'severity': 1
         },
         'dns_tunnel': {
             'name_cn': 'DNS隧道',
-            'description': 'DNS协议隧道通信'
+            'name_en': 'DNS Tunnel',
+            'description': 'DNS协议隧道通信',
+            'severity': 1
         },
         'malicious_dns': {
             'name_cn': '恶意DNS查询',
-            'description': '恶意DNS域名查询'
+            'name_en': 'Malicious DNS',
+            'description': '恶意DNS域名查询',
+            'severity': 2
         },
+        
+        # 恶意软件通信
         'c2_communication': {
             'name_cn': 'C2通信',
-            'description': '命令与控制服务器通信'
-        },
-        'data_exfiltration': {
-            'name_cn': '数据外泄',
-            'description': '敏感数据外传'
+            'name_en': 'C2 Communication',
+            'description': '命令与控制服务器通信',
+            'severity': 1
         },
         'irc_bot': {
             'name_cn': 'IRC僵尸网络',
-            'description': 'IRC协议僵尸网络通信'
+            'name_en': 'IRC Botnet',
+            'description': 'IRC协议僵尸网络通信',
+            'severity': 1
+        },
+        'data_exfiltration': {
+            'name_cn': '数据外泄',
+            'name_en': 'Data Exfiltration',
+            'description': '敏感数据外传',
+            'severity': 1
+        },
+        
+        # 其他攻击
+        'webshell': {
+            'name_cn': 'Webshell后门',
+            'name_en': 'Webshell',
+            'description': 'Webshell后门访问',
+            'severity': 1
+        },
+        'file_inclusion': {
+            'name_cn': '文件包含漏洞',
+            'name_en': 'File Inclusion',
+            'description': '远程/本地文件包含攻击',
+            'severity': 1
+        },
+        'buffer_overflow': {
+            'name_cn': '缓冲区溢出攻击',
+            'name_en': 'Buffer Overflow',
+            'description': '缓冲区溢出漏洞利用',
+            'severity': 1
+        },
+        
+        # 正常流量（非攻击）
+        'normal': {
+            'name_cn': '正常流量',
+            'name_en': 'Normal Traffic',
+            'description': '正常网络流量',
+            'severity': 0
         },
         'unknown': {
             'name_cn': '未知威胁',
-            'description': '无法分类的异常流量'
+            'name_en': 'Unknown Threat',
+            'description': '无法分类的异常流量',
+            'severity': 2
         }
     },
     
@@ -153,5 +344,50 @@ THREAT_CLASSIFICATION_CONFIG = {
         'port_scan_count': 50,         # 端口扫描数量阈值
         'brute_force_count': 10,       # 暴力破解尝试次数阈值
         'ntp_amplification_factor': 10, # NTP放大倍数阈值
+    },
+    
+    # 规则classtype到攻击类型的映射（用于规则匹配）
+    'classtype_mapping': {
+        'sql-injection': 'sql_injection',
+        'sqli': 'sql_injection',
+        'xss': 'xss',
+        'cross-site-scripting': 'xss',
+        'web-application-attack': 'web_attack',
+        'web-attack': 'web_attack',
+        'webshell': 'webshell',
+        'file-inclusion': 'file_inclusion',
+        'command-injection': 'cmd_injection',
+        'buffer-overflow': 'buffer_overflow',
+        'dos': 'dos',
+        'ddos': 'ddos',
+        'flood': 'dos',
+        'scan': 'port_scan',
+        'port-scan': 'port_scan',
+        'attempted-recon': 'port_scan',
+        'reconnaissance': 'port_scan',
+        'trojan': 'c2_communication',
+        'backdoor': 'webshell',
+        'worm': 'c2_communication',
+        'malware': 'c2_communication',
+        'irc': 'irc_bot',
+        'ircbot': 'irc_bot',
+        'botnet': 'irc_bot',
+        'c2': 'c2_communication',
+        'brute-force': 'brute_force',
+        'bruteforce': 'brute_force',
+        'suspicious-login': 'brute_force',
+        'default-login': 'brute_force',
+        'dns-tunnel': 'dns_tunnel',
+        'ntp-amplification': 'ntp_amplification',
+        'amplification': 'ntp_amplification',
+        'misc-activity': 'unknown',
+        'attempted-admin': 'brute_force',
+        'attempted-user': 'brute_force',
+        'bad-unknown': 'unknown',
+        'unknown': 'unknown',
+        'potential-threat': 'unknown',
+        'suspicious': 'unknown',
+        'bad-traffic': 'unknown',
+        'malicious-activity': 'unknown'
     }
 }

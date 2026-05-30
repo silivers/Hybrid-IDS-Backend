@@ -14,6 +14,7 @@ from engine.rule_matcher import RuleMatcher, MatchResult
 from storage.alert_repo import AlertRepository
 from storage.packet_cache import PacketCache
 from capture.packet_capture import CapturedPacket
+from config import THREAT_CLASSIFICATION_CONFIG
 
 
 @dataclass
@@ -72,6 +73,10 @@ class DetectionEngine:
             'cache_packets': 0,
             'errors': 0
         }
+        
+        # 加载威胁分类配置
+        self.attack_types = THREAT_CLASSIFICATION_CONFIG.get('attack_types', {})
+        self.classtype_mapping = THREAT_CLASSIFICATION_CONFIG.get('classtype_mapping', {})
         
         # 启动清理线程
         self._stop_cleanup = False
@@ -162,102 +167,29 @@ class DetectionEngine:
     def _get_threat_type_from_rule(self, match_result: MatchResult) -> str:
         """从规则匹配结果中获取威胁类型（仅用于控制台显示）"""
         
-        # 扩展的 classtype 映射表
-        classtype_map = {
-            # SQL注入相关
-            'sql-injection': 'SQL注入攻击',
-            'sqli': 'SQL注入攻击',
-            
-            # XSS相关
-            'xss': '跨站脚本攻击',
-            'cross-site-scripting': 'XSS跨站脚本攻击',
-            
-            # Web攻击相关
-            'web-application-attack': 'Web应用攻击',
-            'web-attack': 'Web攻击',
-            'webshell': 'Webshell后门',
-            'file-inclusion': '文件包含漏洞',
-            'command-injection': '命令注入攻击',
-            
-            # 缓冲区溢出
-            'buffer-overflow': '缓冲区溢出攻击',
-            'stack-overflow': '栈溢出攻击',
-            
-            # DoS/DDoS相关
-            'dos': '拒绝服务攻击',
-            'ddos': '分布式拒绝服务攻击',
-            'flood': '流量洪水攻击',
-            
-            # 扫描探测
-            'scan': '端口扫描探测',
-            'port-scan': '端口扫描',
-            'attempted-recon': '信息探测',
-            'reconnaissance': '侦察探测',
-            'attempted-reconnaissance': '信息探测尝试',
-            'scanning': '网络扫描',
-            
-            # 恶意软件
-            'trojan': '木马活动',
-            'backdoor': '后门访问',
-            'worm': '蠕虫病毒',
-            'malware': '恶意软件',
-            'ransomware': '勒索软件',
-            
-            # 僵尸网络
-            'irc': 'IRC僵尸网络',
-            'ircbot': 'IRC僵尸网络',
-            'botnet': '僵尸网络',
-            'c2': 'C2服务器通信',
-            'irc-activity': 'IRC活动流量',
-            'irc-communication': 'IRC通信',
-            
-            # 暴力破解
-            'brute-force': '暴力破解攻击',
-            'bruteforce': '暴力破解',
-            'suspicious-login': '可疑登录',
-            'default-login': '默认口令登录',
-            'login-brute-force': '登录暴力破解',
-            
-            # 协议滥用
-            'dns-tunnel': 'DNS隧道',
-            'ntp-amplification': 'NTP放大攻击',
-            'amplification': '反射放大攻击',
-            
-            # 其他
-            'misc-activity': '异常行为',
-            'attempted-admin': '提权尝试',
-            'attempted-user': '用户权限尝试',
-            'successful-admin': '成功提权',
-            'successful-user': '成功登录',
-            'successful-recon': '成功侦察',
-            
-            # 未知/可疑
-            'bad-unknown': '可疑恶意流量',
-            'unknown': '未知威胁',
-            'potential-threat': '潜在威胁',
-            'suspicious': '可疑行为',
-            'bad-traffic': '恶意流量',
-            'malicious-activity': '恶意活动',
-        }
-        
-        # 优先使用 classtype
+        # 1. 优先使用 classtype 映射
         if match_result.classtype:
             classtype_lower = match_result.classtype.lower()
             # 精确匹配
-            if classtype_lower in classtype_map:
-                return classtype_map[classtype_lower]
+            if classtype_lower in self.classtype_mapping:
+                attack_key = self.classtype_mapping[classtype_lower]
+                if attack_key in self.attack_types:
+                    return self.attack_types[attack_key].get('name_cn', attack_key)
+            
             # 模糊匹配（包含关键词）
-            for key, value in classtype_map.items():
+            for key, attack_key in self.classtype_mapping.items():
                 if key in classtype_lower:
-                    return value
+                    if attack_key in self.attack_types:
+                        return self.attack_types[attack_key].get('name_cn', attack_key)
+            
             # 返回格式化的原始值
             return match_result.classtype.replace('-', ' ').title()
         
-        # 根据匹配内容推断威胁类型
+        # 2. 根据匹配内容推断威胁类型
         if match_result.matched_content:
             content = match_result.matched_content.lower()
             
-            # IRC/僵尸网络特征（针对你的告警）
+            # IRC/僵尸网络特征
             if 'psybnc' in content or 'irc' in content or 'bot' in content:
                 return 'IRC僵尸网络'
             if 'welcome' in content and 'psybnc' in content:
@@ -265,17 +197,32 @@ class DetectionEngine:
             
             # SQL注入特征
             sql_patterns = ['union select', 'select from', 'or 1=1', 'and 1=1', 
-                            'sql injection', 'sleep(', 'benchmark(', 'information_schema']
+                            'sql injection', 'sleep(', 'benchmark(', 'information_schema',
+                            'drop table', 'extractvalue']
             for pattern in sql_patterns:
                 if pattern in content:
                     return 'SQL注入攻击'
             
             # XSS特征
             xss_patterns = ['<script', 'javascript:', 'onerror=', 'onload=', 
-                            'alert(', 'document.cookie', 'xss']
+                            'alert(', 'document.cookie', 'xss', '<img', '<svg']
             for pattern in xss_patterns:
                 if pattern in content:
                     return 'XSS跨站脚本攻击'
+            
+            # 路径遍历特征
+            traversal_patterns = ['../', '..\\', 'etc/passwd', 'win.ini', 
+                                  'boot.ini', 'web-inf', '.ssh/id_rsa']
+            for pattern in traversal_patterns:
+                if pattern in content:
+                    return '路径遍历攻击'
+            
+            # 命令注入特征
+            cmd_patterns = ['; cat', '| ls', '`whoami`', '$(whoami)', 
+                           'wget http', 'curl http', '/bin/sh']
+            for pattern in cmd_patterns:
+                if pattern in content:
+                    return '命令注入攻击'
             
             # 后门特征
             backdoor_patterns = ['backdoor', 'shell', 'cmd.exe', '/bin/sh', 'eval(']
@@ -291,7 +238,7 @@ class DetectionEngine:
             if 'login' in content or 'password' in content or 'brute' in content:
                 return '暴力破解攻击'
         
-        # 根据规则ID范围推断
+        # 3. 根据规则ID范围推断
         if match_result.sid:
             if 1 <= match_result.sid <= 1000:
                 return 'Web攻击'
@@ -359,7 +306,9 @@ class DetectionEngine:
                 severity=match_result.severity,
                 matched_content=match_result.matched_content,
                 payload_preview=packet.payload_preview,
-                msg=match_result.msg
+                msg=match_result.msg,
+                attack_type=match_result.classtype,
+                attack_name=threat_type
             )
             
             # 标记整个流已处理（防止后续包继续告警）
@@ -445,7 +394,9 @@ class DetectionEngine:
                 severity=match_result.severity,
                 matched_content=match_result.matched_content,
                 payload_preview=flow_stats.get_payload_preview(),
-                msg=match_result.msg
+                msg=match_result.msg,
+                attack_type=match_result.classtype,
+                attack_name=threat_type
             )
             
             self._mark_flow_processed(flow_key)
