@@ -32,7 +32,7 @@ MODEL_CONFIG = {
 # ========== 检测配置 ==========
 DETECTION_CONFIG = {
     # 威胁概率阈值（超过此值判定为威胁）
-    'threat_threshold': 0.9,
+    'threat_threshold': 0.8,
     # 模糊区域阈值（在此阈值和威胁阈值之间为模糊行为）
     'uncertain_threshold': 0.5,
     # 流超时时间（秒）

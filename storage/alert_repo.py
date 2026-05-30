@@ -20,9 +20,9 @@ class AlertRepository:
                 pool_size=DB_CONFIG.get('pool_size', 5),
                 **{k: v for k, v in DB_CONFIG.items() if k not in ['pool_size', 'pool_recycle']}
             )
-            print("[INFO] AlertRepository connection pool initialized")
+            print("[信息] 告警仓库连接池初始化成功")
         except Exception as e:
-            print(f"[ERROR] Failed to initialize alert pool: {e}")
+            print(f"[错误] 初始化告警连接池失败: {e}")
             self.pool = None
     
     def _get_conn(self):
@@ -93,8 +93,8 @@ class AlertRepository:
         """, (sid, datetime.now(), src_ip, src_port, dst_ip, dst_port,
               protocol, severity, payload_preview, matched_content, 0))
         
-        print(f"[ALERT] sid={sid}, src={src_ip}:{src_port} -> dst={dst_ip}:{dst_port}, "
-              f"severity={severity}, content={matched_content}")
+        print(f"[告警] sid={sid}, 源={src_ip}:{src_port} -> 目标={dst_ip}:{dst_port}, "
+              f"严重级别={severity}, 匹配内容={matched_content}")
         return alert_id
     
     def save_model_alert(self, src_ip: str, src_port: int, dst_ip: str, 
@@ -116,12 +116,12 @@ class AlertRepository:
             alert_id: 插入的告警ID
         """
         severity = 1 if probability >= 0.7 else (2 if probability >= 0.5 else 3)
-        matched_content = f"model_prediction={prediction},prob={probability:.3f}"
+        matched_content = f"模型预测结果={prediction},概率={probability:.3f}"
         return self.save_alert(
             sid=0, src_ip=src_ip, src_port=src_port,
             dst_ip=dst_ip, dst_port=dst_port, protocol=protocol,
             severity=severity, matched_content=matched_content,
-            payload_preview=payload_preview, msg=f"Model detected threat (prob={probability:.3f})"
+            payload_preview=payload_preview, msg=f"模型检测到威胁 (概率={probability:.3f})"
         )
 
     # ========== API扩展方法 ==========
@@ -133,7 +133,7 @@ class AlertRepository:
             days: 统计天数，默认7天
         
         Returns:
-            包含total_alerts、high_severity、unprocessed、affected_assets的字典
+            包含总告警数、高危告警数、未处理数、受影响资产的字典
         """
         result = self._execute("""
             SELECT 
@@ -153,7 +153,7 @@ class AlertRepository:
             hours: 最近小时数，默认24小时
         
         Returns:
-            包含last_24h和last_7d两个趋势列表的字典
+            包含最近24小时和最近7天两个趋势列表的字典
         """
         return {
             'last_24h': self._execute("""
@@ -175,7 +175,7 @@ class AlertRepository:
             days: 统计天数，默认7天
         
         Returns:
-            包含severity、count、level的列表
+            包含严重级别、计数、等级名称的列表
         """
         return self._execute("""
             SELECT severity, COUNT(*) as count,
@@ -192,7 +192,7 @@ class AlertRepository:
             days: 统计天数，默认7天
         
         Returns:
-            包含src_ip、count、high_count的列表
+            包含源IP、总次数、高危次数的列表
         """
         return self._execute("""
             SELECT src_ip, COUNT(*) as count, SUM(CASE WHEN severity = 1 THEN 1 ELSE 0 END) as high_count
@@ -208,7 +208,7 @@ class AlertRepository:
             days: 统计天数，默认7天
         
         Returns:
-            包含dst_ip、count、high_count的列表
+            包含目标IP、总次数、高危次数的列表
         """
         return self._execute("""
             SELECT dst_ip, COUNT(*) as count, SUM(CASE WHEN severity = 1 THEN 1 ELSE 0 END) as high_count
@@ -224,7 +224,7 @@ class AlertRepository:
             days: 统计天数，默认7天
         
         Returns:
-            包含sid、msg、count的列表（排除模型告警sid=0）
+            包含规则ID、告警消息、次数的列表（排除模型告警sid=0）
         """
         return self._execute("""
             SELECT a.sid, r.msg, COUNT(*) as count
@@ -241,7 +241,7 @@ class AlertRepository:
             days: 统计天数，默认7天
         
         Returns:
-            包含sid、msg、count的列表
+            包含规则ID、告警消息、次数的列表
         """
         return self.get_top_alert_types(limit, days)
     
@@ -251,19 +251,20 @@ class AlertRepository:
         """获取告警列表（支持分页、筛选、排序）
         
         Args:
-            filters: 筛选条件字典，支持start_time、end_time、severity、src_ip、
-                     dst_ip、protocol、processed、sid
+            filters: 筛选条件字典，支持开始时间、结束时间、严重级别、源IP、
+                     目标IP、协议、处理状态、规则ID
             page: 页码，从1开始
             page_size: 每页数量
-            sort_by: 排序字段（timestamp、severity、src_ip、dst_ip、alert_id）
+            sort_by: 排序字段（时间、严重级别、源IP、目标IP、告警ID）
             sort_order: 排序方向（DESC/ASC）
         
         Returns:
-            (total_count, alerts_list) 元组
+            (总记录数, 告警列表) 元组
         """
         where = []
         params = []
         
+        # 筛选条件映射
         filter_map = {
             'start_time': ("timestamp >= %s", lambda v: v),
             'end_time': ("timestamp <= %s", lambda v: v),
@@ -281,6 +282,7 @@ class AlertRepository:
         
         where_sql = " AND ".join(where) if where else "1=1"
         
+        # 允许的排序字段
         allowed_sort = {'timestamp', 'severity', 'src_ip', 'dst_ip', 'alert_id'}
         sort_by = sort_by if sort_by in allowed_sort else 'timestamp'
         sort_order = 'DESC' if sort_order.upper() == 'DESC' else 'ASC'
@@ -411,8 +413,8 @@ class AlertRepository:
             dst_ip: 目标IP地址（受保护的资产）
         
         Returns:
-            包含total_alerts、max_severity、first_alert、last_alert、
-            unique_attackers、unique_rules的字典
+            包含总告警数、最高严重级别、首次告警、最近告警、
+            攻击源数、触发规则数的字典
         """
         result = self._execute("""
             SELECT COUNT(*) as total_alerts, MAX(severity) as max_severity,
@@ -434,7 +436,7 @@ class AlertRepository:
             limit: 返回数量限制，默认10
         
         Returns:
-            包含src_ip、alert_count、high_count、last_alert的列表
+            包含源IP、告警数、高危数、最近告警的列表
         """
         results = self._execute("""
             SELECT src_ip, COUNT(*) as alert_count, SUM(CASE WHEN severity = 1 THEN 1 ELSE 0 END) as high_count,
@@ -456,7 +458,7 @@ class AlertRepository:
             days: 天数，默认7天
         
         Returns:
-            包含date、count、high_count的列表
+            包含日期、告警数、高危数的列表
         """
         results = self._execute("""
             SELECT DATE(timestamp) as date, COUNT(*) as count,
@@ -479,11 +481,11 @@ class AlertRepository:
         Args:
             severity_threshold: 严重程度阈值（1=高，2=中，3=低）
             has_unprocessed: 是否只返回有未处理告警的资产
-            sort_by: 排序字段（total_alerts、max_severity、last_alert、unprocessed_count）
+            sort_by: 排序字段（总告警数、最高严重级别、最近告警、未处理数）
             limit: 返回数量限制，默认50
         
         Returns:
-            包含dst_ip、total_alerts、max_severity、last_alert、unprocessed_count的列表
+            包含目标IP、总告警数、最高严重级别、最近告警、未处理数的列表
         """
         having = []
         params = []
@@ -559,7 +561,7 @@ class AlertRepository:
             days: 天数，默认7天
         
         Returns:
-            包含date、count、high_count的列表
+            包含日期、告警数、高危数的列表
         """
         return self.get_asset_timeline(dst_ip, days)
     
@@ -571,7 +573,7 @@ class AlertRepository:
             limit: 返回数量限制，默认20
         
         Returns:
-            包含src_ip、alert_count、high_count、last_alert的列表
+            包含源IP、告警数、高危数、最近告警的列表
         """
         return self.get_attacker_summary(dst_ip, limit)
     
@@ -584,7 +586,7 @@ class AlertRepository:
             group_by: 分组粒度（day或hour）
         
         Returns:
-            包含summary和trend的字典
+            包含摘要统计和趋势数据的字典
         """
         time_field = "DATE_FORMAT(timestamp, '%Y-%m-%d %H:00:00')" if group_by == 'hour' else "DATE(timestamp)"
         
@@ -622,8 +624,8 @@ class AlertRepository:
             limit: 返回数量限制，默认10
         
         Returns:
-            包含src_ip、alert_count、high_count、medium_count、low_count、
-            target_count、first_seen、last_seen的列表
+            包含源IP、告警数、高危数、中危数、低危数、
+            目标数、首次发现、最近发现的列表
         """
         results = self._execute("""
             SELECT src_ip, COUNT(*) as alert_count, SUM(CASE WHEN severity = 1 THEN 1 ELSE 0 END) as high_count,
@@ -649,8 +651,8 @@ class AlertRepository:
             limit: 返回数量限制，默认10
         
         Returns:
-            包含sid、msg、classtype、rule_severity、hit_count、
-            unique_sources、unique_targets的列表
+            包含规则ID、告警消息、分类、规则严重级别、命中次数、
+            攻击源数、目标数的列表
         """
         return self._execute("""
             SELECT a.sid, r.msg, r.classtype, r.severity as rule_severity,
@@ -669,7 +671,7 @@ class AlertRepository:
             end_date: 结束日期
         
         Returns:
-            包含classtype、count、percentage的列表
+            包含分类名称、数量、百分比的列表
         """
         return self._execute("""
             SELECT r.classtype, COUNT(*) as count,
@@ -683,7 +685,7 @@ class AlertRepository:
         """获取所有筛选器选项（动态生成前端下拉框）
         
         Returns:
-            包含protocols、severities、processed_status、classtypes的字典
+            包含协议、严重级别、处理状态、告警分类的字典
         """
         return {
             'protocols': self._execute("SELECT DISTINCT protocol, COUNT(*) as count FROM snort_alerts GROUP BY protocol", fetch_all=True) or [],

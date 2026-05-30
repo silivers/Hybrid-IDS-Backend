@@ -49,8 +49,8 @@ class DataPreprocessor:
         self._load_scaler()
         self._load_feature_names()
         
-        print(f"[INFO] DataPreprocessor initialized: {len(self.feature_columns)} features, "
-                   f"categorical={self.categorical_columns}")
+        print(f"[信息] 数据预处理器初始化完成：特征数={len(self.feature_columns)}，"
+                   f"类别特征={self.categorical_columns}")
     
     def _load_encoders(self) -> None:
         """加载标签编码器 - 使用 joblib 与训练代码保持一致"""
@@ -58,18 +58,18 @@ class DataPreprocessor:
         try:
             if encoder_path.exists():
                 self.encoders = joblib.load(encoder_path)
-                print(f"[INFO] Loaded label encoders from {encoder_path}")
-                print(f"[INFO] Encoder keys: {list(self.encoders.keys())}")
+                print(f"[信息] 成功加载标签编码器：{encoder_path}")
+                print(f"[信息] 编码器键列表：{list(self.encoders.keys())}")
                 
                 # 打印每个编码器的类别，便于调试
                 for col, encoder in self.encoders.items():
                     if hasattr(encoder, 'classes_'):
-                        print(f"[INFO] {col} encoder classes: {list(encoder.classes_)}")
+                        print(f"[信息] {col} 编码器类别：{list(encoder.classes_)}")
             else:
-                print(f"[WARNING] Label encoders not found at {encoder_path}, using default")
+                print(f"[警告] 标签编码器未找到：{encoder_path}，使用默认设置")
                 self.encoders = {}
         except Exception as e:
-            print(f"[ERROR] Failed to load label encoders: {e}")
+            print(f"[错误] 加载标签编码器失败：{e}")
             self.encoders = {}
     
     def _load_scaler(self) -> None:
@@ -78,14 +78,14 @@ class DataPreprocessor:
         try:
             if scaler_path.exists():
                 self.scaler = joblib.load(scaler_path)
-                print(f"[INFO] Loaded scaler from {scaler_path}")
+                print(f"[信息] 成功加载标准化器：{scaler_path}")
                 if hasattr(self.scaler, 'mean_'):
-                    print(f"[INFO] Scaler mean shape: {self.scaler.mean_.shape}")
+                    print(f"[信息] 标准化器均值维度：{self.scaler.mean_.shape}")
             else:
-                print(f"[WARNING] Scaler not found at {scaler_path}, using default")
+                print(f"[警告] 标准化器未找到：{scaler_path}，使用默认设置")
                 self.scaler = None
         except Exception as e:
-            print(f"[ERROR] Failed to load scaler: {e}")
+            print(f"[错误] 加载标准化器失败：{e}")
             self.scaler = None
     
     def _load_feature_names(self) -> None:
@@ -95,13 +95,13 @@ class DataPreprocessor:
             if feature_path.exists():
                 with open(feature_path, 'r') as f:
                     self.feature_names = [line.strip() for line in f if line.strip()]
-                print(f"[INFO] Loaded feature names from {feature_path}")
-                print(f"[INFO] Feature count: {len(self.feature_names)}")
+                print(f"[信息] 成功加载特征名称：{feature_path}")
+                print(f"[信息] 特征数量：{len(self.feature_names)}")
             else:
-                print(f"[WARNING] Feature names not found at {feature_path}, using config")
+                print(f"[警告] 特征名称文件未找到：{feature_path}，使用配置文件")
                 self.feature_names = self.feature_columns
         except Exception as e:
-            print(f"[ERROR] Failed to load feature names: {e}")
+            print(f"[错误] 加载特征名称失败：{e}")
             self.feature_names = self.feature_columns
     
     def _encode_categorical(self, value: Union[str, int], column: str) -> int:
@@ -147,7 +147,7 @@ class DataPreprocessor:
                     original = lower_to_original[value_lower]
                     encoded = int(encoder.transform([original])[0])
                     # 使用 DEBUG 级别记录映射（可选）
-                    # print(f"[DEBUG] Mapped '{value_str}' -> '{original}' for column '{column}'")
+                    # print(f"[调试] 映射 '{value_str}' -> '{original}' 用于列 '{column}'")
                     return encoded
                 
                 # 3. 如果是数字字符串，尝试直接转换（某些情况下类别可能被预处理成数字）
@@ -155,7 +155,7 @@ class DataPreprocessor:
                     return int(value_str)
                 
                 # 4. 完全未知，返回-1
-                print(f"[DEBUG] Unknown category '{value_str}' for column '{column}', using -1")
+                print(f"[调试] 列 '{column}' 的未知类别 '{value_str}'，使用 -1")
                 return -1
             
             # 处理自定义字典编码器
@@ -188,7 +188,7 @@ class DataPreprocessor:
             if col in df.columns:
                 df[col] = df[col].apply(lambda x: self._encode_categorical(x, col))
             else:
-                print(f"[WARNING] Categorical column '{col}' not found in data")
+                print(f"[警告] 数据中未找到类别列 '{col}'")
                 df[col] = -1
         return df
     
@@ -206,7 +206,7 @@ class DataPreprocessor:
             标准化后的数据框
         """
         if self.scaler is None:
-            print("[WARNING] Scaler not available, skipping standardization")
+            print("[警告] 标准化器不可用，跳过标准化步骤")
             return df
         
         try:
@@ -221,7 +221,7 @@ class DataPreprocessor:
             
             return df_scaled
         except Exception as e:
-            print(f"[ERROR] Standardization failed: {e}")
+            print(f"[错误] 标准化失败：{e}")
             return df
     
     def _handle_missing_values(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -277,13 +277,13 @@ class DataPreprocessor:
             df = features_list.copy()
         
         if df.empty:
-            print("[WARNING] Empty features list")
+            print("[警告] 空特征列表")
             return None
         
         # 确保所有必需特征都存在
         for col in self.feature_names:
             if col not in df.columns:
-                print(f"[WARNING] Missing feature column '{col}', filling with 0")
+                print(f"[警告] 缺少特征列 '{col}'，用0填充")
                 df[col] = 0
         
         # 只保留需要的特征列，按顺序排列
@@ -301,7 +301,7 @@ class DataPreprocessor:
         # 转换为numpy数组
         X = df.values.astype(np.float32)
         
-        print(f"[DEBUG] Preprocessed {len(df)} samples, shape={X.shape}")
+        print(f"[调试] 已预处理 {len(df)} 个样本，形状={X.shape}")
         
         return X
     

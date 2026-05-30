@@ -64,7 +64,7 @@ class AsyncProcessor:
             'errors': 0
         }
         
-        print("[INFO] AsyncProcessor initialized with flow deduplication")
+        print("[信息] 异步处理器初始化完成（启用流去重功能）")
     
     def _get_flow_unique_key(self, flow: FlowStats) -> str:
         """生成流的唯一键（双向，不考虑方向）"""
@@ -123,7 +123,7 @@ class AsyncProcessor:
         for i in range(num_workers):
             worker = threading.Thread(
                 target=self._worker_loop,
-                name=f"AsyncWorker-{i+1}",
+                name=f"异步工作线程-{i+1}",
                 daemon=True
             )
             worker.start()
@@ -132,7 +132,7 @@ class AsyncProcessor:
         # 启动统计打印线程（可选）
         self._start_stats_thread()
         
-        print(f"[INFO] AsyncProcessor started with {num_workers} workers")
+        print(f"[信息] 异步处理器已启动，工作线程数：{num_workers}")
     
     def _start_stats_thread(self):
         """启动统计信息打印线程"""
@@ -140,10 +140,10 @@ class AsyncProcessor:
             while not self._stop_event.is_set():
                 time.sleep(60)  # 每分钟打印一次
                 if self._stats['flows_processed'] > 0:
-                    print(f"[STATS] AsyncProcessor: flows_processed={self._stats['flows_processed']}, "
-                          f"alerts={self._stats['alerts_generated']}, "
-                          f"duplicates={self._stats['duplicates_skipped']}, "
-                          f"queue_size={self.task_queue.qsize()}")
+                    print(f"[统计] 异步处理器：已处理流数={self._stats['flows_processed']}, "
+                          f"告警数={self._stats['alerts_generated']}, "
+                          f"重复跳过数={self._stats['duplicates_skipped']}, "
+                          f"队列大小={self.task_queue.qsize()}")
         
         stats_thread = threading.Thread(target=stats_loop, daemon=True)
         stats_thread.start()
@@ -159,7 +159,7 @@ class AsyncProcessor:
         try:
             self.task_queue.put_nowait((packet_id, packet))
         except queue.Full:
-            print(f"[WARNING] Task queue full, dropping packet {packet_id}")
+            print(f"[警告] 任务队列已满，丢弃数据包 {packet_id}")
     
     def _worker_loop(self):
         """工作线程主循环"""
@@ -176,7 +176,7 @@ class AsyncProcessor:
             except queue.Empty:
                 continue
             except Exception as e:
-                print(f"[ERROR] Worker error: {e}")
+                print(f"[错误] 工作线程异常：{e}")
                 self._stats['errors'] += 1
     
     def _process_packet(self, packet_id: str, packet):
@@ -202,7 +202,7 @@ class AsyncProcessor:
             # self.packet_cache.delete_packet(packet_id)
             
         except Exception as e:
-            print(f"[ERROR] Failed to process packet {packet_id}: {e}")
+            print(f"[错误] 处理数据包失败 {packet_id}：{e}")
             self._stats['errors'] += 1
     
     def _process_completed_flow(self, flow: FlowStats):
@@ -222,7 +222,7 @@ class AsyncProcessor:
             features = self.feature_extractor.extract_features(flow)
             
             if not features:
-                print(f"[WARNING] Failed to extract features for flow: {flow.key}")
+                print(f"[警告] 流特征提取失败：{flow.key}")
                 return
             
             # 2. 添加全局统计特征（ct_srv_src等）
@@ -236,9 +236,9 @@ class AsyncProcessor:
             
             # 只在非正常流量时打印（可选，避免刷屏）
             if verdict != 'normal':
-                print(f"[INFO] Flow {flow.key.src_ip}:{flow.key.src_port} -> "
+                print(f"[信息] 流 {flow.key.src_ip}:{flow.key.src_port} -> "
                       f"{flow.key.dst_ip}:{flow.key.dst_port}, "
-                      f"prob={probability:.3f}, verdict={verdict}")
+                      f"威胁概率={probability:.3f}, 判定结果={verdict}")
             
             # 4. 如果判定为威胁，写入告警
             if verdict == 'malicious' or (verdict == 'uncertain' and probability >= 0.5):
@@ -255,9 +255,9 @@ class AsyncProcessor:
                 
                 if alert_id > 0:
                     self._stats['alerts_generated'] += 1
-                    print(f"[ALERT] Model detected threat: {flow.key.src_ip}:{flow.key.src_port} -> "
+                    print(f"[告警] 模型检测到威胁：{flow.key.src_ip}:{flow.key.src_port} -> "
                           f"{flow.key.dst_ip}:{flow.key.dst_port}, "
-                          f"prob={probability:.3f}, alert_id={alert_id}")
+                          f"威胁概率={probability:.3f}, 告警ID={alert_id}")
             
             # 5. 标记流已处理
             self._mark_flow_processed(flow)
@@ -267,7 +267,7 @@ class AsyncProcessor:
             self._update_global_stats(flow)
             
         except Exception as e:
-            print(f"[ERROR] Failed to process completed flow: {e}")
+            print(f"[错误] 处理完成的流失败：{e}")
             self._stats['errors'] += 1
     
     def _add_global_stats(self, features: Dict, flow: FlowStats) -> Dict:
@@ -330,7 +330,7 @@ class AsyncProcessor:
     
     def stop(self):
         """停止异步处理器"""
-        print("[INFO] Stopping AsyncProcessor...")
+        print("[信息] 正在停止异步处理器...")
         self._stop_event.set()
         
         # 等待所有工作线程结束
@@ -338,15 +338,15 @@ class AsyncProcessor:
             worker.join(timeout=5)
         
         # 刷新所有未完成的流
-        print("[INFO] Flushing remaining flows...")
+        print("[信息] 正在刷新剩余的流...")
         flushed_count = self.flush_all_flows()
-        print(f"[INFO] Flushed {flushed_count} remaining flows")
+        print(f"[信息] 已刷新 {flushed_count} 个剩余的流")
         
         # 关闭缓存
         self.packet_cache.shutdown()
         
         # 打印最终统计
-        print(f"[INFO] AsyncProcessor stopped. Final stats: {self._stats}")
+        print(f"[信息] 异步处理器已停止。最终统计：{self._stats}")
     
     def reset_stats(self):
         """重置统计信息"""
@@ -361,4 +361,4 @@ class AsyncProcessor:
         """清空流处理缓存"""
         with self._lock:
             self._processed_flows.clear()
-        print("[INFO] Flow processing cache cleared")
+        print("[信息] 流处理缓存已清空")

@@ -43,7 +43,7 @@ class ModelPredictor:
         self._load_model()
         self._load_preprocessor()
         
-        print(f"[INFO] ModelPredictor initialized: threshold={self.threat_threshold}")
+        print(f"[信息] 模型预测器初始化完成：威胁阈值={self.threat_threshold}")
     
     def _load_model(self):
         """加载XGBoost模型"""
@@ -53,18 +53,18 @@ class ModelPredictor:
             if model_path.exists():
                 # 尝试用joblib加载
                 self.model = joblib.load(model_path)
-                print(f"[INFO] Loaded XGBoost model from {model_path}")
+                print(f"[信息] 成功加载XGBoost模型：{model_path}")
                 
                 # 打印模型信息
                 if hasattr(self.model, 'get_params'):
                     params = self.model.get_params()
-                    print(f"[INFO] Model params: n_estimators={params.get('n_estimators', 'N/A')}, "
-                          f"max_depth={params.get('max_depth', 'N/A')}")
+                    print(f"[信息] 模型参数：n_estimators={params.get('n_estimators', '未知')}, "
+                          f"max_depth={params.get('max_depth', '未知')}")
             else:
-                raise FileNotFoundError(f"Model not found at {model_path}")
+                raise FileNotFoundError(f"模型文件未找到：{model_path}")
                 
         except Exception as e:
-            print(f"[ERROR] Failed to load model: {e}")
+            print(f"[错误] 加载模型失败：{e}")
             self.model = None
     
     def _load_preprocessor(self):
@@ -72,9 +72,9 @@ class ModelPredictor:
         try:
             self.preprocessor = DataPreprocessor(model_dir=self.model_dir)
             if not self.preprocessor.is_ready():
-                print("[WARNING] Preprocessor not fully ready")
+                print("[警告] 预处理器未完全就绪")
         except Exception as e:
-            print(f"[ERROR] Failed to load preprocessor: {e}")
+            print(f"[错误] 加载预处理器失败：{e}")
             self.preprocessor = None
     
     def predict(self, features: Dict[str, any]) -> Tuple[float, int]:
@@ -88,11 +88,11 @@ class ModelPredictor:
             (probability, prediction): 威胁概率和预测类别（0=正常,1=威胁）
         """
         if self.model is None:
-            print("[ERROR] Model not loaded")
+            print("[错误] 模型未加载")
             return 0.0, 0
         
         if self.preprocessor is None:
-            print("[ERROR] Preprocessor not loaded")
+            print("[错误] 预处理器未加载")
             return 0.0, 0
         
         try:
@@ -100,7 +100,7 @@ class ModelPredictor:
             X = self.preprocessor.preprocess(features)
             
             if X is None:
-                print("[ERROR] Feature preprocessing failed")
+                print("[错误] 特征预处理失败")
                 return 0.0, 0
             
             # 预测概率
@@ -112,7 +112,7 @@ class ModelPredictor:
             return probability, prediction
             
         except Exception as e:
-            print(f"[ERROR] Prediction failed: {e}")
+            print(f"[错误] 预测失败：{e}")
             return 0.0, 0
     
     def predict_batch(self, features_list: List[Dict[str, any]]) -> List[Tuple[float, int]]:
@@ -126,7 +126,7 @@ class ModelPredictor:
             [(probability, prediction), ...]
         """
         if self.model is None or self.preprocessor is None:
-            print("[ERROR] Model or preprocessor not loaded")
+            print("[错误] 模型或预处理器未加载")
             return [(0.0, 0) for _ in features_list]
         
         try:
@@ -144,7 +144,7 @@ class ModelPredictor:
             return list(zip(probabilities, predictions))
             
         except Exception as e:
-            print(f"[ERROR] Batch prediction failed: {e}")
+            print(f"[错误] 批量预测失败：{e}")
             return [(0.0, 0) for _ in features_list]
     
     def predict_with_confidence(self, features: Dict[str, any]) -> Dict:
@@ -184,7 +184,7 @@ class ModelPredictor:
     
     def reload(self):
         """重新加载模型（用于热更新）"""
-        print("[INFO] Reloading model...")
+        print("[信息] 正在重新加载模型...")
         self._load_model()
         self._load_preprocessor()
-        print("[INFO] Model reload complete")
+        print("[信息] 模型重新加载完成")

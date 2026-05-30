@@ -77,7 +77,7 @@ class DetectionEngine:
         self._stop_cleanup = False
         self._start_cleanup_thread()
         
-        print("[INFO] DetectionEngine initialized with multi-level deduplication")
+        print("[信息] 检测引擎初始化完成（启用多级去重机制）")
     
     def _start_cleanup_thread(self):
         """启动缓存清理线程"""
@@ -179,7 +179,7 @@ class DetectionEngine:
             return DetectionResult(
                 is_threat=False,
                 source='skipped',
-                message="Flow already processed"
+                message="流已处理，跳过后续包"
             )
         
         # 阶段1：规则匹配（快速路径）
@@ -193,7 +193,7 @@ class DetectionEngine:
                     source='rule_deduplicated',
                     sid=match_result.sid,
                     severity=match_result.severity,
-                    message=f"Duplicate alert suppressed: sid={match_result.sid}"
+                    message=f"重复告警已被抑制：sid={match_result.sid}"
                 )
             
             # 命中规则，立即告警
@@ -215,16 +215,16 @@ class DetectionEngine:
             # 标记整个流已处理（防止后续包继续告警）
             self._mark_flow_processed(flow_key)
             
-            print(f"[ALERT] sid={match_result.sid}, src={packet.src_ip}:{packet.src_port} -> "
-                  f"dst={packet.dst_ip}:{packet.dst_port}, severity={match_result.severity}, "
-                  f"content={match_result.matched_content} (alert_id={alert_id})")
+            print(f"[告警] sid={match_result.sid}, 源={packet.src_ip}:{packet.src_port} -> "
+                  f"目标={packet.dst_ip}:{packet.dst_port}, 严重级别={match_result.severity}, "
+                  f"匹配内容={match_result.matched_content} (告警ID={alert_id})")
             
             return DetectionResult(
                 is_threat=True,
                 source='rule',
                 sid=match_result.sid,
                 severity=match_result.severity,
-                message=match_result.msg or f"Rule matched: sid={match_result.sid}",
+                message=match_result.msg or f"规则匹配：sid={match_result.sid}",
                 matched_content=match_result.matched_content
             )
         
@@ -241,7 +241,7 @@ class DetectionEngine:
         return DetectionResult(
             is_threat=False,
             source='pending',
-            message="Packet cached for model analysis"
+            message="数据包已缓存，等待模型分析"
         )
     
     def process_flow(self, flow_stats) -> Optional[DetectionResult]:
@@ -295,16 +295,16 @@ class DetectionEngine:
             
             self._mark_flow_processed(flow_key)
             
-            print(f"[ALERT] sid={match_result.sid}, src={flow_stats.key.src_ip}:{flow_stats.key.src_port} -> "
-                  f"dst={flow_stats.key.dst_ip}:{flow_stats.key.dst_port}, severity={match_result.severity}, "
-                  f"content={match_result.matched_content} (flow alert_id={alert_id})")
+            print(f"[告警] sid={match_result.sid}, 源={flow_stats.key.src_ip}:{flow_stats.key.src_port} -> "
+                  f"目标={flow_stats.key.dst_ip}:{flow_stats.key.dst_port}, 严重级别={match_result.severity}, "
+                  f"匹配内容={match_result.matched_content} (流告警ID={alert_id})")
             
             return DetectionResult(
                 is_threat=True,
                 source='rule',
                 sid=match_result.sid,
                 severity=match_result.severity,
-                message=match_result.msg or f"Rule matched: sid={match_result.sid}"
+                message=match_result.msg or f"规则匹配：sid={match_result.sid}"
             )
         
         # 未命中规则，返回None表示需要模型预测
@@ -335,10 +335,10 @@ class DetectionEngine:
         self._alert_cache.clear()
         self._alert_cache_detailed.clear()
         self._processed_flows.clear()
-        print("[INFO] All detection caches cleared")
+        print("[信息] 所有检测缓存已清空")
     
     def shutdown(self):
         """关闭检测引擎"""
         self._stop_cleanup = True
         self.clear_caches()
-        print("[INFO] DetectionEngine shutdown")
+        print("[信息] 检测引擎已关闭")

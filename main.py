@@ -37,12 +37,12 @@ class HybridIDS:
         if self.alert_repo is None:
             from storage.alert_repo import AlertRepository
             self.alert_repo = AlertRepository()
-            print("[INFO] AlertRepository initialized for API")
+            print("[信息] 告警仓库已初始化，供API使用")
         
         if self.rule_repo is None:
             from storage.rule_repo import RuleRepository
             self.rule_repo = RuleRepository()
-            print("[INFO] RuleRepository initialized for API")
+            print("[信息] 规则仓库已初始化，供API使用")
     
     def _start_api_server(self):
         """启动FastAPI服务器（在独立线程中运行）"""
@@ -59,8 +59,8 @@ class HybridIDS:
             def run_api():
                 """在独立线程中运行API服务器"""
                 try:
-                    print(f"[INFO] Starting FastAPI server on http://{API_CONFIG['host']}:{API_CONFIG['port']}")
-                    print(f"[INFO] API Docs available at http://{API_CONFIG['host']}:{API_CONFIG['port']}/docs")
+                    print(f"[信息] 启动FastAPI服务器：http://{API_CONFIG['host']}:{API_CONFIG['port']}")
+                    print(f"[信息] API文档地址：http://{API_CONFIG['host']}:{API_CONFIG['port']}/docs")
                     uvicorn.run(
                         self.api_app,
                         host=API_CONFIG['host'],
@@ -69,23 +69,23 @@ class HybridIDS:
                         access_log=False
                     )
                 except Exception as e:
-                    print(f"[ERROR] API server failed: {e}")
+                    print(f"[错误] API服务器启动失败：{e}")
             
             # 启动API线程（daemon线程，主进程退出时自动结束）
             self.api_thread = threading.Thread(target=run_api, daemon=True)
             self.api_thread.start()
-            print("[INFO] FastAPI server started successfully")
+            print("[信息] FastAPI服务器已成功启动")
             
         except ImportError as e:
-            print(f"[WARNING] FastAPI not available: {e}")
-            print("[INFO] Continuing without API server")
+            print(f"[警告] FastAPI模块不可用：{e}")
+            print("[信息] 继续运行但不启用API服务器")
         except Exception as e:
-            print(f"[ERROR] Failed to start API server: {e}")
+            print(f"[错误] 启动API服务器失败：{e}")
     
     def start(self):
         """启动系统"""
         print("=" * 60)
-        print("Hybrid IDS System Starting...")
+        print("混合入侵检测系统正在启动...")
         print("=" * 60)
         
         # 初始化流聚合器
@@ -114,16 +114,16 @@ class HybridIDS:
         if API_CONFIG.get('enabled', True):
             self._start_api_server()
         else:
-            print("[INFO] API server disabled by configuration")
+            print("[信息] API服务器已在配置中禁用")
         
         # 启动捕获（带回调）
         self.running = True
         self.packet_capturer.start(callback=self._on_packet_captured)
         
-        print("[INFO] Hybrid IDS is running. Press Ctrl+C to stop.")
+        print("[信息] 混合入侵检测系统正在运行。按 Ctrl+C 停止。")
         if API_CONFIG.get('enabled', True):
-            print(f"[INFO] API available at: http://{API_CONFIG['host']}:{API_CONFIG['port']}")
-            print(f"[INFO] API docs: http://{API_CONFIG['host']}:{API_CONFIG['port']}/docs")
+            print(f"[信息] API地址：http://{API_CONFIG['host']}:{API_CONFIG['port']}")
+            print(f"[信息] API文档：http://{API_CONFIG['host']}:{API_CONFIG['port']}/docs")
         
         # 主循环（保持运行）
         try:
@@ -147,16 +147,16 @@ class HybridIDS:
         """打印系统状态"""
         queue_size = self.async_processor.get_queue_size() if self.async_processor else 0
         active_flows = self.flow_aggregator.get_active_flow_count() if self.flow_aggregator else 0
-        print(f"[STATUS] Active flows: {active_flows}, Queue size: {queue_size}")
+        print(f"[状态] 活跃流数量：{active_flows}，队列大小：{queue_size}")
     
     def _signal_handler(self, signum, frame):
         """信号处理"""
-        print(f"\n[INFO] Received signal {signum}, shutting down...")
+        print(f"\n[信息] 收到信号 {signum}，正在关闭系统...")
         self.stop()
     
     def stop(self):
         """停止系统"""
-        print("[INFO] Stopping Hybrid IDS...")
+        print("[信息] 正在停止混合入侵检测系统...")
         self.running = False
         
         # 停止包捕获
@@ -167,7 +167,7 @@ class HybridIDS:
         if self.async_processor:
             self.async_processor.stop()
         
-        print("[INFO] Hybrid IDS stopped.")
+        print("[信息] 混合入侵检测系统已停止")
     
     # ========== 以下方法供API访问 ==========
     def get_alert_repository(self):

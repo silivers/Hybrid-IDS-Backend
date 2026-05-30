@@ -92,7 +92,7 @@ async def get_alert_detail(
     try:
         alert = alert_repo.get_alert_by_id_with_rule(alert_id)
         if not alert:
-            return ErrorResponse(code=404, message=f'Alert {alert_id} not found')
+            return ErrorResponse(code=404, message=f'告警 {alert_id} 不存在')
         
         # 获取规则信息（如果sid不为0）
         rule_info = None
@@ -138,7 +138,7 @@ async def mark_processed(
         if affected > 0:
             return SuccessResponse(data={'alert_id': alert_id, 'processed': processed})
         else:
-            return ErrorResponse(code=404, message=f'Alert {alert_id} not found')
+            return ErrorResponse(code=404, message=f'告警 {alert_id} 不存在')
         
     except Exception as e:
         return ErrorResponse(code=500, message=str(e))
@@ -152,7 +152,7 @@ async def batch_mark_processed(
     """批量标记告警"""
     try:
         if not request.alert_ids:
-            return ErrorResponse(code=400, message='alert_ids cannot be empty')
+            return ErrorResponse(code=400, message='告警ID列表不能为空')
         
         affected = alert_repo.batch_update_processed(request.alert_ids, request.processed)
         

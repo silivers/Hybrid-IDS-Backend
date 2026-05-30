@@ -76,7 +76,7 @@ class PacketCapturer:
         self._capture_thread: Optional[threading.Thread] = None
         self._callback: Optional[Callable[[CapturedPacket], None]] = None
         
-        print(f"[INFO] PacketCapturer initialized: interface={self.interface}, filter={self.filter_str}")
+        print(f"[信息] 数据包捕获器初始化完成：网卡={self.interface}, 过滤器={self.filter_str}")
     
     def _process_packet(self, packet: Packet) -> None:
         """
@@ -146,16 +146,16 @@ class PacketCapturer:
             try:
                 self._callback(captured)
             except Exception as e:
-                print(f"[ERROR] Callback error: {e}")
+                print(f"[错误] 回调函数执行失败：{e}")
         else:
             try:
                 self._packet_queue.put_nowait(captured)
             except queue.Full:
-                print("[WARNING] Packet queue is full, dropping packet")
+                print("[警告] 数据包队列已满，丢弃数据包")
     
     def _capture_loop(self) -> None:
         """捕获循环（在独立线程中运行）"""
-        print(f"[INFO] Starting packet capture on {self.interface or 'any'}...")
+        print(f"[信息] 开始在 {self.interface or '任意网卡'} 上捕获数据包...")
         try:
             sniff(
                 iface=self.interface,
@@ -166,11 +166,11 @@ class PacketCapturer:
                 stop_filter=lambda x: self._stop_event.is_set()
             )
         except Scapy_Exception as e:
-            print(f"[ERROR] Scapy error: {e}")
+            print(f"[错误] Scapy异常：{e}")
         except Exception as e:
-            print(f"[ERROR] Unexpected error in capture loop: {e}")
+            print(f"[错误] 捕获循环中的未知异常：{e}")
         finally:
-            print("[INFO] Packet capture stopped")
+            print("[信息] 数据包捕获已停止")
     
     def start(self, callback: Optional[Callable[[CapturedPacket], None]] = None) -> None:
         """
@@ -180,21 +180,21 @@ class PacketCapturer:
             callback: 可选的回调函数，用于实时处理每个数据包
         """
         if self._capture_thread and self._capture_thread.is_alive():
-            print("[WARNING] Capture already running")
+            print("[警告] 捕获已在运行中")
             return
         
         self._stop_event.clear()
         self._callback = callback
         self._capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
         self._capture_thread.start()
-        print("[INFO] Packet capture started")
+        print("[信息] 数据包捕获已启动")
     
     def stop(self) -> None:
         """停止包捕获"""
         self._stop_event.set()
         if self._capture_thread:
             self._capture_thread.join(timeout=5)
-        print("[INFO] Packet capture stopped")
+        print("[信息] 数据包捕获已停止")
     
     def get_packet(self, timeout: float = 1.0) -> Optional[CapturedPacket]:
         """
