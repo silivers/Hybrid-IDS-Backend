@@ -1,5 +1,5 @@
 # 构建阶段
-FROM python:3.11-slim AS builder
+FROM python:3.9-slim AS builder
 
 WORKDIR /build
 
@@ -8,7 +8,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 运行阶段
-FROM python:3.11-slim
+FROM python:3.9-slim
 
 WORKDIR /app
 
@@ -19,8 +19,7 @@ RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.li
     libpcap-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 从构建阶段复制已安装的包
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/lib/python3*/site-packages /usr/local/lib/python3.9/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # 复制项目文件
