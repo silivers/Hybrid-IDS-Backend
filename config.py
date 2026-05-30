@@ -32,7 +32,7 @@ MODEL_CONFIG = {
 # ========== 检测配置 ==========
 DETECTION_CONFIG = {
     # 威胁概率阈值（超过此值判定为威胁）
-    'threat_threshold': 0.8,
+    'threat_threshold': 0.9,
     # 模糊区域阈值（在此阈值和威胁阈值之间为模糊行为）
     'uncertain_threshold': 0.5,
     # 流超时时间（秒）
@@ -95,4 +95,63 @@ DEDUPLICATION_CONFIG = {
     'enable_deduplication': True,
     # 同一源IP+目标IP的相似告警聚合窗口（秒）
     'aggregation_window': 10,
+}
+
+# ========== 威胁分类配置（仅用于控制台输出） ==========
+THREAT_CLASSIFICATION_CONFIG = {
+    # 攻击类型映射（用于控制台显示）
+    'attack_types': {
+        'ddos': {
+            'name_cn': 'DDoS攻击',
+            'description': '分布式拒绝服务攻击'
+        },
+        'port_scan': {
+            'name_cn': '端口扫描',
+            'description': '端口扫描探测'
+        },
+        'web_attack': {
+            'name_cn': 'Web攻击',
+            'description': 'Web应用攻击（SQL注入、XSS等）'
+        },
+        'brute_force': {
+            'name_cn': '暴力破解',
+            'description': '密码暴力破解攻击'
+        },
+        'ntp_amplification': {
+            'name_cn': 'NTP放大攻击',
+            'description': 'NTP协议放大反射攻击'
+        },
+        'dns_tunnel': {
+            'name_cn': 'DNS隧道',
+            'description': 'DNS协议隧道通信'
+        },
+        'malicious_dns': {
+            'name_cn': '恶意DNS查询',
+            'description': '恶意DNS域名查询'
+        },
+        'c2_communication': {
+            'name_cn': 'C2通信',
+            'description': '命令与控制服务器通信'
+        },
+        'data_exfiltration': {
+            'name_cn': '数据外泄',
+            'description': '敏感数据外传'
+        },
+        'irc_bot': {
+            'name_cn': 'IRC僵尸网络',
+            'description': 'IRC协议僵尸网络通信'
+        },
+        'unknown': {
+            'name_cn': '未知威胁',
+            'description': '无法分类的异常流量'
+        }
+    },
+    
+    # 攻击检测阈值
+    'thresholds': {
+        'ddos_packet_rate': 100,      # 每秒包数阈值
+        'port_scan_count': 50,         # 端口扫描数量阈值
+        'brute_force_count': 10,       # 暴力破解尝试次数阈值
+        'ntp_amplification_factor': 10, # NTP放大倍数阈值
+    }
 }

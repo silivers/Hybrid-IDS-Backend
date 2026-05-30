@@ -159,6 +159,45 @@ class DetectionEngine:
         """标记流已处理"""
         self._processed_flows.add(flow_key)
     
+    def _get_threat_type_from_rule(self, match_result: MatchResult) -> str:
+        """从规则匹配结果中获取威胁类型（仅用于控制台显示）"""
+        # 优先使用 classtype
+        if match_result.classtype:
+            # 将英文classtype转换为中文
+            classtype_map = {
+                'sql-injection': 'SQL注入',
+                'xss': '跨站脚本攻击',
+                'buffer-overflow': '缓冲区溢出',
+                'dos': '拒绝服务攻击',
+                'scan': '端口扫描',
+                'trojan': '木马活动',
+                'backdoor': '后门访问',
+                'web-application-attack': 'Web应用攻击',
+                'attempted-recon': '信息探测',
+                'attempted-dos': 'DoS尝试',
+                'suspicious-login': '可疑登录',
+                'default-login': '默认口令登录',
+                'misc-activity': '杂项活动',
+                'irc': 'IRC通信',
+                'botnet': '僵尸网络',
+                'unknown': '未知威胁'
+            }
+            return classtype_map.get(match_result.classtype.lower(), match_result.classtype)
+        
+        # 根据匹配内容推断威胁类型
+        if match_result.matched_content:
+            content = match_result.matched_content.lower()
+            if 'union select' in content or 'sql' in content:
+                return 'SQL注入'
+            elif 'script' in content or 'javascript' in content:
+                return 'XSS攻击'
+            elif 'buffer' in content or 'overflow' in content:
+                return '缓冲区溢出'
+            elif 'login' in content or 'password' in content:
+                return '暴力破解'
+        
+        return '规则告警'
+    
     def process_packet(self, packet: CapturedPacket) -> DetectionResult:
         """
         处理单个数据包
@@ -199,6 +238,9 @@ class DetectionEngine:
             # 命中规则，立即告警
             self.stats['rule_matches'] += 1
             
+            # 获取威胁类型（仅用于显示）
+            threat_type = self._get_threat_type_from_rule(match_result)
+            
             alert_id = self.alert_repo.save_alert(
                 sid=match_result.sid,
                 src_ip=packet.src_ip,
@@ -215,8 +257,10 @@ class DetectionEngine:
             # 标记整个流已处理（防止后续包继续告警）
             self._mark_flow_processed(flow_key)
             
-            print(f"[告警] sid={match_result.sid}, 源={packet.src_ip}:{packet.src_port} -> "
-                  f"目标={packet.dst_ip}:{packet.dst_port}, 严重级别={match_result.severity}, "
+            # 增强控制台输出：添加威胁类型信息
+            print(f"[告警] sid={match_result.sid}, 威胁类型={threat_type}, "
+                  f"源={packet.src_ip}:{packet.src_port} -> 目标={packet.dst_ip}:{packet.dst_port}, "
+                  f"严重级别={match_result.severity}, "
                   f"匹配内容={match_result.matched_content} (告警ID={alert_id})")
             
             return DetectionResult(
@@ -279,6 +323,9 @@ class DetectionEngine:
                 self._mark_flow_processed(flow_key)
                 return None
             
+            # 获取威胁类型（仅用于显示）
+            threat_type = self._get_threat_type_from_rule(match_result)
+            
             # 命中规则
             alert_id = self.alert_repo.save_alert(
                 sid=match_result.sid,
@@ -295,8 +342,11 @@ class DetectionEngine:
             
             self._mark_flow_processed(flow_key)
             
-            print(f"[告警] sid={match_result.sid}, 源={flow_stats.key.src_ip}:{flow_stats.key.src_port} -> "
-                  f"目标={flow_stats.key.dst_ip}:{flow_stats.key.dst_port}, 严重级别={match_result.severity}, "
+            # 增强控制台输出：添加威胁类型信息
+            print(f"[告警] sid={match_result.sid}, 威胁类型={threat_type}, "
+                  f"源={flow_stats.key.src_ip}:{flow_stats.key.src_port} -> "
+                  f"目标={flow_stats.key.dst_ip}:{flow_stats.key.dst_port}, "
+                  f"严重级别={match_result.severity}, "
                   f"匹配内容={match_result.matched_content} (流告警ID={alert_id})")
             
             return DetectionResult(

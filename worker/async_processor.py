@@ -228,19 +228,15 @@ class AsyncProcessor:
             # 2. 添加全局统计特征（ct_srv_src等）
             features = self._add_global_stats(features, flow)
             
-            # 3. 模型预测
+            # 3. 模型预测（包含攻击类型分类）
             result = self.model_predictor.predict_with_confidence(features)
             
             probability = result['probability']
             verdict = result['verdict']
+            attack_type = result.get('attack_type', 'unknown')
+            attack_name = result.get('attack_name', '未知威胁')
             
-            # 只在非正常流量时打印（可选，避免刷屏）
-            if verdict != 'normal':
-                print(f"[信息] 流 {flow.key.src_ip}:{flow.key.src_port} -> "
-                      f"{flow.key.dst_ip}:{flow.key.dst_port}, "
-                      f"威胁概率={probability:.3f}, 判定结果={verdict}")
-            
-            # 4. 如果判定为威胁，写入告警
+            # 4. 如果判定为威胁，写入告警（保持原有功能不变）
             if verdict == 'malicious' or (verdict == 'uncertain' and probability >= 0.5):
                 alert_id = self.alert_repo.save_model_alert(
                     src_ip=flow.key.src_ip,
@@ -255,9 +251,16 @@ class AsyncProcessor:
                 
                 if alert_id > 0:
                     self._stats['alerts_generated'] += 1
+                    # 增强控制台输出：添加攻击类型信息
                     print(f"[告警] 模型检测到威胁：{flow.key.src_ip}:{flow.key.src_port} -> "
                           f"{flow.key.dst_ip}:{flow.key.dst_port}, "
-                          f"威胁概率={probability:.3f}, 告警ID={alert_id}")
+                          f"威胁类型={attack_name}, 威胁概率={probability:.3f}, 告警ID={alert_id}")
+            else:
+                # 非威胁流量也可以打印详细信息（调试用）
+                if verdict != 'normal':
+                    print(f"[信息] 流 {flow.key.src_ip}:{flow.key.src_port} -> "
+                          f"{flow.key.dst_ip}:{flow.key.dst_port}, "
+                          f"威胁概率={probability:.3f}, 判定={verdict}, 疑似类型={attack_name}")
             
             # 5. 标记流已处理
             self._mark_flow_processed(flow)
