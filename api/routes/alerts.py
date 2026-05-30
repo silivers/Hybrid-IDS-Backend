@@ -56,12 +56,7 @@ async def get_alerts(
             sort_order=sort_order
         )
         
-        # 添加严重程度标签
-        severity_labels = {1: '高', 2: '中', 3: '低'}
-        for alert in alerts:
-            alert['severity_level'] = severity_labels.get(alert['severity'], '未知')
-        
-        # 构建分页响应
+        # 构建分页响应（alerts 已经包含 attack_name 和 threat_type）
         total_pages = (total + page_size - 1) // page_size if total > 0 else 0
         
         data = {
@@ -111,10 +106,13 @@ async def get_alert_detail(
             'dst_port': alert['dst_port'],
             'protocol': alert['protocol'],
             'severity': alert['severity'],
-            'severity_level': {1: '高', 2: '中', 3: '低'}.get(alert['severity'], '未知'),
+            'severity_level': alert.get('severity_level', {1: '高', 2: '中', 3: '低'}.get(alert['severity'], '未知')),
             'processed': alert['processed'],
             'matched_content': alert['matched_content'],
             'payload_preview': alert['payload_preview'],
+            'attack_type': alert.get('attack_type', 'unknown'),
+            'attack_name': alert.get('attack_name', '未知威胁'),
+            'threat_type': alert.get('threat_type', '未知威胁'),
             'rule': rule_info,
             'rule_contents': rule_contents
         }

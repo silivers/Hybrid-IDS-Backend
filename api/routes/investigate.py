@@ -55,6 +55,27 @@ async def investigate_source(
             dst_summary_list = []
             total = 0
         
+        # 格式化告警列表，确保包含 threat_type
+        formatted_alerts = []
+        for alert in alerts[:50]:
+            formatted_alerts.append({
+                'alert_id': alert.get('alert_id'),
+                'sid': alert.get('sid'),
+                'timestamp': alert.get('timestamp'),
+                'src_ip': alert.get('src_ip'),
+                'src_port': alert.get('src_port'),
+                'dst_ip': alert.get('dst_ip'),
+                'dst_port': alert.get('dst_port'),
+                'protocol': alert.get('protocol'),
+                'severity': alert.get('severity'),
+                'severity_level': alert.get('severity_level', {1: '高', 2: '中', 3: '低'}.get(alert.get('severity'), '未知')),
+                'matched_content': alert.get('matched_content'),
+                'processed': alert.get('processed'),
+                'attack_type': alert.get('attack_type', 'unknown'),
+                'attack_name': alert.get('attack_name', '未知威胁'),
+                'threat_type': alert.get('threat_type', '未知威胁')
+            })
+        
         data = {
             'src_ip': src_ip,
             'statistics': {
@@ -68,7 +89,7 @@ async def investigate_source(
                 'first_alert': first_alert,
                 'last_alert': last_alert
             },
-            'alerts': alerts[:50],
+            'alerts': formatted_alerts,
             'dst_ip_summary': dst_summary_list[:20]
         }
         
@@ -99,9 +120,28 @@ async def investigate_conversation(
         
         alerts = alert_repo.get_conversation_alerts(src_ip, dst_ip, start_dt, end_dt)
         
+        # 格式化告警列表
+        formatted_alerts = []
+        for alert in alerts:
+            formatted_alerts.append({
+                'alert_id': alert.get('alert_id'),
+                'sid': alert.get('sid'),
+                'timestamp': alert.get('timestamp'),
+                'src_port': alert.get('src_port'),
+                'dst_port': alert.get('dst_port'),
+                'protocol': alert.get('protocol'),
+                'severity': alert.get('severity'),
+                'severity_level': alert.get('severity_level', {1: '高', 2: '中', 3: '低'}.get(alert.get('severity'), '未知')),
+                'matched_content': alert.get('matched_content'),
+                'processed': alert.get('processed'),
+                'attack_type': alert.get('attack_type', 'unknown'),
+                'attack_name': alert.get('attack_name', '未知威胁'),
+                'threat_type': alert.get('threat_type', '未知威胁')
+            })
+        
         # 按时间窗口聚合
         aggregated = {}
-        for alert in alerts:
+        for alert in formatted_alerts:
             ts = datetime.fromisoformat(alert['timestamp'])
             window_key = ts.replace(minute=(ts.minute // time_window_minutes) * time_window_minutes, second=0, microsecond=0)
             key_str = window_key.strftime('%Y-%m-%d %H:%M:%S')
@@ -131,7 +171,7 @@ async def investigate_conversation(
             'total_alerts': len(alerts),
             'time_window_minutes': time_window_minutes,
             'aggregated_alerts': aggregated_list,
-            'timeline': alerts
+            'timeline': formatted_alerts
         }
         
         return SuccessResponse(data=data)

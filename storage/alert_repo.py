@@ -3,6 +3,7 @@ import mysql.connector
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime, date
 import sys, os
+import re
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import DB_CONFIG
@@ -26,11 +27,7 @@ class AlertRepository:
             self.pool = None
     
     def _get_conn(self):
-        """获取数据库连接
-        
-        Returns:
-            MySQL连接对象
-        """
+        """获取数据库连接"""
         if self.pool:
             return self.pool.get_connection()
         import mysql.connector
@@ -38,18 +35,7 @@ class AlertRepository:
                                           if k not in ['pool_size', 'pool_recycle']})
     
     def _execute(self, query: str, params: tuple = None, fetch_one=False, fetch_all=False, return_id=False):
-        """统一执行SQL方法
-        
-        Args:
-            query: SQL查询语句
-            params: 查询参数元组
-            fetch_one: 是否返回单条记录
-            fetch_all: 是否返回所有记录
-            return_id: 是否返回自增ID（仅用于INSERT操作）
-        
-        Returns:
-            根据参数返回单条记录、多条记录、影响行数、自增ID或None
-        """
+        """统一执行SQL方法"""
         conn = self._get_conn()
         cursor = conn.cursor(dictionary=True)
         try:
@@ -60,12 +46,125 @@ class AlertRepository:
                 return cursor.fetchall()
             conn.commit()
             if return_id:
-                # 返回最后插入的自增ID
                 return cursor.lastrowid
             return cursor.rowcount
         finally:
             cursor.close()
             conn.close()
+    
+    def _extract_attack_info(self, matched_content: str, sid: int = 0) -> tuple:
+        """
+        从 matched_content 中提取攻击类型和名称
+        
+        Args:
+            matched_content: 匹配内容字符串
+            sid: 规则ID
+        
+        Returns:
+            (attack_type, attack_name)
+        """
+        attack_type = 'unknown'
+        attack_name = '未知威胁'
+        
+        if not matched_content:
+            return attack_type, attack_name
+        
+        # 尝试解析 attack_type 和 attack_name
+        if 'attack_type=' in matched_content and 'attack_name=' in matched_content:
+            parts = matched_content.split(',')
+            for part in parts:
+                if part.startswith('attack_type='):
+                    attack_type = part.replace('attack_type=', '')
+                elif part.startswith('attack_name='):
+                    attack_name = part.replace('attack_name=', '')
+            return attack_type, attack_name
+        
+        # 模型告警
+        if '模型预测结果' in matched_content:
+            attack_type = 'model_prediction'
+            # 提取概率
+            prob_match = re.search(r'概率=([\d.]+)', matched_content)
+            if prob_match:
+                prob = prob_match.group(1)
+                attack_name = f'模型检测威胁 (概率={prob})'
+            else:
+                attack_name = '模型检测威胁'
+            return attack_type, attack_name
+        
+        # 规则告警 - 根据 sid 判断
+        if sid != 0:
+            # 根据 sid 范围判断攻击类型
+            if 1 <= sid <= 1000:
+                attack_type = 'web_attack'
+                attack_name = 'Web攻击'
+            elif 1001 <= sid <= 2000:
+                attack_type = 'scan'
+                attack_name = '扫描探测'
+            elif 2001 <= sid <= 3000:
+                attack_type = 'dos'
+                attack_name = 'DoS攻击'
+            elif 3001 <= sid <= 4000:
+                attack_type = 'malware'
+                attack_name = '恶意软件'
+            else:
+                attack_type = 'rule_alert'
+                attack_name = f'规则告警 (sid={sid})'
+            return attack_type, attack_name
+        
+        # 根据内容关键词判断
+        content_lower = matched_content.lower()
+        
+        # SQL注入
+        if any(k in content_lower for k in ['union select', 'select from', 'or 1=1', 'drop table', 'sql injection']):
+            attack_type = 'sql_injection'
+            attack_name = 'SQL注入攻击'
+        # XSS
+        elif any(k in content_lower for k in ['<script', 'javascript:', 'onerror=', 'xss']):
+            attack_type = 'xss'
+            attack_name = 'XSS跨站脚本攻击'
+        # 路径遍历
+        elif any(k in content_lower for k in ['../', 'etc/passwd', 'win.ini']):
+            attack_type = 'path_traversal'
+            attack_name = '路径遍历攻击'
+        # 命令注入
+        elif any(k in content_lower for k in ['; cat', '| ls', 'whoami', 'wget http']):
+            attack_type = 'cmd_injection'
+            attack_name = '命令注入攻击'
+        # IRC僵尸网络
+        elif 'psybnc' in content_lower or 'irc' in content_lower:
+            attack_type = 'irc_bot'
+            attack_name = 'IRC僵尸网络'
+        # 端口扫描
+        elif 'scan' in content_lower:
+            attack_type = 'port_scan'
+            attack_name = '端口扫描'
+        # 暴力破解
+        elif 'login' in content_lower or 'password' in content_lower:
+            attack_type = 'brute_force'
+            attack_name = '暴力破解攻击'
+        
+        return attack_type, attack_name
+    
+    def _enrich_alert(self, alert: Dict) -> Dict:
+        """为告警添加攻击类型等额外字段"""
+        if not alert:
+            return alert
+        
+        matched_content = alert.get('matched_content', '')
+        sid = alert.get('sid', 0)
+        
+        # 提取攻击信息
+        attack_type, attack_name = self._extract_attack_info(matched_content, sid)
+        
+        alert['attack_type'] = attack_type
+        alert['attack_name'] = attack_name
+        alert['threat_type'] = attack_name  # 兼容前端字段
+        
+        # 添加严重程度标签
+        severity_labels = {1: '高', 2: '中', 3: '低'}
+        alert['severity_level'] = severity_labels.get(alert.get('severity'), '未知')
+        
+        return alert
     
     def save_alert(self, sid: int, src_ip: str, src_port: int,
                    dst_ip: str, dst_port: int, protocol: str,
@@ -74,25 +173,7 @@ class AlertRepository:
                    msg: Optional[str] = None,
                    attack_type: Optional[str] = None,
                    attack_name: Optional[str] = None) -> int:
-        """保存告警记录
-        
-        Args:
-            sid: 规则ID（0表示模型检测）
-            src_ip: 源IP地址
-            src_port: 源端口
-            dst_ip: 目的IP地址
-            dst_port: 目的端口
-            protocol: 协议类型
-            severity: 严重程度（1=高，2=中，3=低）
-            matched_content: 匹配到的content内容或模型预测信息
-            payload_preview: payload预览（十六进制）
-            msg: 告警消息（可选）
-            attack_type: 攻击类型标识（可选）
-            attack_name: 攻击类型名称（可选）
-        
-        Returns:
-            alert_id: 插入的告警ID，失败返回-1
-        """
+        """保存告警记录"""
         # 构建匹配内容字符串（包含攻击类型）
         if attack_type and attack_name:
             full_matched_content = f"{matched_content},attack_type={attack_type},attack_name={attack_name}"
@@ -107,13 +188,12 @@ class AlertRepository:
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (sid, datetime.now(), src_ip, src_port, dst_ip, dst_port,
               protocol, severity, payload_preview, full_matched_content, 0),
-        return_id=True)  # 关键修改：返回自增ID
+        return_id=True)
         
-        # 如果获取ID失败，返回-1
         if alert_id is None:
             alert_id = -1
         
-        # 输出带攻击类型的告警信息（包含真实的告警ID）
+        # 输出带攻击类型的告警信息
         if attack_name:
             print(f"[告警] sid={sid}, 源={src_ip}:{src_port} -> 目标={dst_ip}:{dst_port}, "
                   f"严重级别={severity}, 攻击类型={attack_name}, 匹配内容={matched_content} (告警ID={alert_id})")
@@ -127,27 +207,10 @@ class AlertRepository:
                          prediction: int, payload_preview: Optional[str] = None,
                          attack_type: Optional[str] = None,
                          attack_name: Optional[str] = None) -> int:
-        """保存模型检测的告警（sid=0表示模型检测）
-        
-        Args:
-            src_ip: 源IP地址
-            src_port: 源端口
-            dst_ip: 目的IP地址
-            dst_port: 目的端口
-            protocol: 协议类型
-            probability: 模型预测概率（0-1）
-            prediction: 模型预测结果（0=正常，1=恶意）
-            payload_preview: payload预览（可选）
-            attack_type: 攻击类型标识（可选）
-            attack_name: 攻击类型名称（可选）
-        
-        Returns:
-            alert_id: 插入的告警ID
-        """
+        """保存模型检测的告警"""
         severity = 1 if probability >= 0.7 else (2 if probability >= 0.5 else 3)
         matched_content = f"模型预测结果={prediction},概率={probability:.3f}"
         
-        # 添加攻击类型到消息中
         msg = f"模型检测到威胁 (概率={probability:.3f})"
         if attack_name:
             msg += f" - {attack_name}"
@@ -160,7 +223,7 @@ class AlertRepository:
             attack_type=attack_type, attack_name=attack_name
         )
     
-    # ========== API扩展方法（保持不变） ==========
+    # ========== API扩展方法 ==========
     
     def get_dashboard_metrics(self, days: int = 7) -> dict:
         """获取仪表盘核心指标"""
@@ -270,6 +333,8 @@ class AlertRepository:
         for alert in alerts:
             if alert.get('timestamp'):
                 alert['timestamp'] = alert['timestamp'].strftime('%Y-%m-%d %H:%M:%S')
+            # 添加攻击类型信息
+            self._enrich_alert(alert)
         
         return total, alerts
     
@@ -282,6 +347,8 @@ class AlertRepository:
         """, (alert_id,), fetch_one=True)
         if alert and alert.get('timestamp'):
             alert['timestamp'] = alert['timestamp'].strftime('%Y-%m-%d %H:%M:%S')
+        if alert:
+            self._enrich_alert(alert)
         return alert
     
     def batch_update_processed(self, alert_ids: List[int], processed: int = 1) -> int:
@@ -314,6 +381,9 @@ class AlertRepository:
         for alert in alerts:
             if alert.get('timestamp'):
                 alert['timestamp'] = alert['timestamp'].strftime('%Y-%m-%d %H:%M:%S')
+            # 添加攻击类型信息
+            self._enrich_alert(alert)
+        
         return alerts
     
     def get_conversation_alerts(self, src_ip: str, dst_ip: str,
@@ -338,6 +408,9 @@ class AlertRepository:
         for alert in alerts:
             if alert.get('timestamp'):
                 alert['timestamp'] = alert['timestamp'].strftime('%Y-%m-%d %H:%M:%S')
+            # 添加攻击类型信息
+            self._enrich_alert(alert)
+        
         return alerts
     
     def get_asset_context(self, dst_ip: str) -> Dict:
